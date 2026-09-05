@@ -202,7 +202,7 @@ def trading_loop():
                     s["entry_cost"] = calculated_entry
                     entry_fee = (s["entry_cost"] * MARGIN_LEVERAGE) * FEE_RATE
                     sim_cash -= (s["entry_cost"] + entry_fee)
-                    total_fees_paid += entry_fee
+                     total_fees_paid += entry_fee
                     s["buy_price"] = limit_buy_target
                     s["position_qty"] = (s["entry_cost"] * MARGIN_LEVERAGE) / s["buy_price"]
                     s["highest_high_in_trade"] = current_close
