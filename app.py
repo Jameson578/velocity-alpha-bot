@@ -116,7 +116,6 @@ def calculate_trend_signals(df_input):
     df['High_Close_Prev'] = abs(df['High'] - df['Close'].shift(1))
     df['Low_Close_Prev'] = abs(df['Low'] - df['Close'].shift(1))
     
-    # FIXED: Clean matrix call mapping the syntax logic bug directly
     df['TR'] = df[['High_Low', 'High_Close_Prev', 'Low_Close_Prev']].max(axis=1)
     df['ATR'] = df['TR'].rolling(window=20, min_periods=1).mean()
     df['Asset_Norm_Vol'] = df['ATR'] / df['Close']
@@ -182,10 +181,16 @@ def trading_loop():
 
                 if current_high >= target_profit_price or current_low <= target_stop_price:
                     exit_price = target_profit_price if current_high >= target_profit_price else target_stop_price
-                    net_pnl = (s["entry_cost"] * ((exit_price - s["buy_price"]) / s["buy_price"]) * MARGIN_LEVERAGE) - ((s["entry_cost"] * MARGIN_LEVERAGE) * FEE_RATE)
-                    total_fees_paid += ((s["entry_cost"] * MARGIN_LEVERAGE) * FEE_RATE)
+                    
+                    # Calculate exit fee first
+                    exit_fee = (s["entry_cost"] * MARGIN_LEVERAGE) * FEE_RATE
+                    net_pnl = (s["entry_cost"] * ((exit_price - s["buy_price"]) / s["buy_price"]) * MARGIN_LEVERAGE) - exit_fee
+                    
+                    # FIXED: Consolidated unique addition to pool metric
+                    total_fees_paid += exit_fee
                     sim_cash += s["entry_cost"] + net_pnl
                     trade_counter += 1
+                    
                     print(f"🏁 [LIQUIDATION] -> Reason: {reason_code} | Net PnL: ${net_pnl:+.2f} | Wallet: ${sim_cash:,.2f}")
                     s["is_holding"] = False
                     s["position_qty"] = 0.0
@@ -202,7 +207,7 @@ def trading_loop():
                     s["entry_cost"] = calculated_entry
                     entry_fee = (s["entry_cost"] * MARGIN_LEVERAGE) * FEE_RATE
                     sim_cash -= (s["entry_cost"] + entry_fee)
-                     total_fees_paid += entry_fee
+                    total_fees_paid += entry_fee
                     s["buy_price"] = limit_buy_target
                     s["position_qty"] = (s["entry_cost"] * MARGIN_LEVERAGE) / s["buy_price"]
                     s["highest_high_in_trade"] = current_close
@@ -213,7 +218,3 @@ def trading_loop():
         active_positions_value = sum([thread_states[sym]["entry_cost"] for sym in PORTFOLIO_SYMBOLS if thread_states[sym]["is_holding"]])
         print(f"📊 Net Pool Equity: ${(sim_cash + active_positions_value):,.2f} | Total Session Fees: ${total_fees_paid:,.2f}")
         sys.stdout.flush()
-        time.sleep(POLLING_INTERVAL_SECONDS)
-
-if __name__ == '__main__':
-    # Start the core engine execution thread
