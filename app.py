@@ -182,11 +182,9 @@ def trading_loop():
                 if current_high >= target_profit_price or current_low <= target_stop_price:
                     exit_price = target_profit_price if current_high >= target_profit_price else target_stop_price
                     
-                    # Calculate exit fee first
                     exit_fee = (s["entry_cost"] * MARGIN_LEVERAGE) * FEE_RATE
                     net_pnl = (s["entry_cost"] * ((exit_price - s["buy_price"]) / s["buy_price"]) * MARGIN_LEVERAGE) - exit_fee
                     
-                    # FIXED: Consolidated unique addition to pool metric
                     total_fees_paid += exit_fee
                     sim_cash += s["entry_cost"] + net_pnl
                     trade_counter += 1
@@ -218,3 +216,7 @@ def trading_loop():
         active_positions_value = sum([thread_states[sym]["entry_cost"] for sym in PORTFOLIO_SYMBOLS if thread_states[sym]["is_holding"]])
         print(f"📊 Net Pool Equity: ${(sim_cash + active_positions_value):,.2f} | Total Session Fees: ${total_fees_paid:,.2f}")
         sys.stdout.flush()
+        time.sleep(POLLING_INTERVAL_SECONDS)
+
+if __name__ == '__main__':
+    t = threading.Thread(target=trading_loop, daemon=True)
