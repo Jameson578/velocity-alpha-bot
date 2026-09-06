@@ -1,213 +1,210 @@
-import os
-import sys
-import time
-import threading
-import logging
-import pandas as pd
-import numpy as np
-from datetime import datetime, UTC
+import os 
+import sys 
+import time 
+import threading 
+import logging 
+import pandas as pd 
+import numpy as np 
+from datetime import datetime, UTC 
 
-# Configure standard root logging to force output straight through Gunicorn onto your screen
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    handlers=[logging.StreamHandler(sys.stdout)]
-)
+# Configure standard root logging to force output straight through Gunicorn/Render dashboard
+logging.basicConfig( 
+    level=logging.INFO, 
+    format='%(asctime)s [%(levelname)s] %(message)s', 
+    handlers=[logging.StreamHandler(sys.stdout)] 
+) 
 
 # 🌐 LIGHTWEIGHT WEB SERVER FOR RENDER.COM DEPLOYMENT
-try:
-    from flask import Flask
-    app = Flask(__name__)
-    
-    @app.route('/')
-    def health_check():
-        return "Velocity Alpha Engine: ONLINE", 200
-except ImportError:
-    logging.error("❌ Critical Error: 'Flask' library not detected.")
-    sys.exit(1)
+try: 
+    from flask import Flask 
+    app = Flask(__name__) 
+    @app.route('/') 
+    def health_check(): 
+        return "Velocity Alpha Engine: ONLINE", 200 
+except ImportError: 
+    logging.error("❌ Critical Error: 'Flask' library not detected.") 
+    sys.exit(1) 
 
-# 🌟 SECURE CONFIGURATION: Pulls keys safely from Render's Environment panel
-ALPACA_API_KEY = os.getenv("ALPACA_API_KEY")
-ALPACA_SECRET_KEY = os.getenv("ALPACA_SECRET_KEY")
-ACCOUNT_TYPE = "paper"
+# 🌟 SECURE CONFIGURATION: Pulls keys safely from Render's Environment Variables panel
+# DO NOT hardcode your live keys here. Input them in your Render dashboard settings instead.
+ALPACA_API_KEY = os.getenv("ALPACA_API_KEY", "YOUR_ALPACA_API_KEY") 
+ALPACA_SECRET_KEY = os.getenv("ALPACA_SECRET_KEY", "YOUR_ALPACA_SECRET_KEY") 
+ACCOUNT_TYPE = "paper" 
 
-try:
-    from alpaca.data.historical import CryptoHistoricalDataClient
-    from alpaca.data.requests import CryptoBarsRequest
-    from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
-except ImportError:
-    logging.error("❌ Critical Error: 'alpaca-py' library not detected.")
-    sys.exit(1)
+try: 
+    from alpaca.data.historical import CryptoHistoricalDataClient 
+    from alpaca.data.requests import CryptoBarsRequest 
+    from alpaca.data.timeframe import TimeFrame, TimeFrameUnit 
+except ImportError: 
+    logging.error("❌ Critical Error: 'alpaca-py' library not detected.") 
+    sys.exit(1) 
 
-# 1. CORE OPERATIONAL CONTROL CENTER (MULTI-ASSET MATRIX - COMPATIBLE FORMATS)
-# Changed to universal format "BTC/USD" but handled defensively in the data engine
-PORTFOLIO_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD"]
-INITIAL_CASH = 1184.62         # Target Starting Capital
-MARGIN_LEVERAGE = 1.5          # Managed leverage to absorb 15-min noise
-ATR_PROFIT_MULT = 2.5          # Optimized profit threshold to bank returns
-ATR_STOP_MULT = 2.5            # Widened stop boundary to eliminate noise shakeouts
-FEE_RATE = 0.0010
-POLLING_INTERVAL_SECONDS = 15
+# 1. CORE OPERATIONAL CONTROL CENTER (Mimicking Script 2 Parameters)
+PORTFOLIO_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD"] 
+INITIAL_CASH = 500.00 
+MARGIN_LEVERAGE = 1.5 
+ATR_PROFIT_MULT = 2.5 
+ATR_STOP_MULT = 2.5 
+FEE_RATE = 0.0010 
+POLLING_INTERVAL_SECONDS = 15 
 
-# 2. LOCAL PORTFOLIO MANAGEMENT STATE (SHARED REINVESTMENT POOL)
-sim_cash = INITIAL_CASH
-trade_counter = 0
-total_fees_paid = 0.0
+# 2. LOCAL SIMULATED PORTFOLIO MANAGEMENT STATE
+sim_cash = INITIAL_CASH 
+trade_counter = 0 
+total_fees_paid = 0.0 
 
-thread_states = {symbol: {
-    "is_holding": False,
-    "position_qty": 0.0,
-    "buy_price": 0.0,
-    "entry_cost": 0.0,
-    "highest_high_in_trade": 0.0
-} for symbol in PORTFOLIO_SYMBOLS}
+# Independent tracking dictionaries matching Script 2 format
+thread_states = {symbol: { 
+    "is_holding": False, 
+    "position_qty": 0.0, 
+    "buy_price": 0.0, 
+    "entry_cost": 0.0, 
+    "highest_high_in_trade": 0.0 
+} for symbol in PORTFOLIO_SYMBOLS} 
 
-# Initialize data client if keys are present
-data_client = None
-if ALPACA_API_KEY and ALPACA_SECRET_KEY:
-    data_client = CryptoHistoricalDataClient(api_key=ALPACA_API_KEY, secret_key=ALPACA_SECRET_KEY)
+# Initialize the data handshake client safely if keys exist
+data_client = None 
+if ALPACA_API_KEY and "YOUR_" not in ALPACA_API_KEY:
+    data_client = CryptoHistoricalDataClient(api_key=ALPACA_API_KEY, secret_key=ALPACA_SECRET_KEY) 
 
-# 3. TECHNICAL CONTEXT GENERATION ENGINES
-def fetch_live_market_candles(symbol):
-    """Pulls live 15-minute structural bars via Alpaca API with multi-format fallback."""
+# 3. LIVE MARKET DATA FETCH ENGINE
+def fetch_live_market_candles(symbol): 
+    """Pulls genuine live 15-minute OHLCV bars for a specific pair via the authenticated Alpaca SDK.""" 
     if not data_client:
         return None
-    end_time = datetime.now(UTC)
-    start_time = end_time - pd.Timedelta(hours=100)
+    end_time = datetime.now(UTC) 
+    start_time = end_time - pd.Timedelta(hours=100) 
     
-    # Defensive Check: Try format arrays sequentially to bypass Alpaca dictionary locks
-    for test_symbol in [symbol, symbol.replace("/", ""), symbol.replace("/", "")] :
-        request_params = CryptoBarsRequest(
-            symbol_or_symbols=test_symbol, timeframe=TimeFrame(15, TimeFrameUnit.Minute), start=start_time, end=end_time
-        )
-        try:
-            bars = data_client.get_crypto_bars(request_params)
-            df_raw = bars.df
-            if df_raw is not None and not df_raw.empty:
-                df = df_raw.reset_index(level=0, drop=True)
-                df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume'}, inplace=True)
-                return df[['Open', 'High', 'Low', 'Close', 'Volume']]
-        except Exception:
-            continue
-            
-    logging.warning(f"⚠️ Data feed returned empty matrix or connection failed for {symbol}")
-    return None
+    request_params = CryptoBarsRequest( 
+        symbol_or_symbols=symbol, 
+        timeframe=TimeFrame(15, TimeFrameUnit.Minute), 
+        start=start_time, 
+        end=end_time 
+    ) 
+    try: 
+        bars = data_client.get_crypto_bars(request_params) 
+        df_raw = bars.df 
+        if df_raw is None or df_raw.empty: 
+            raise ValueError(f"Alpaca node returned an empty snapshot matrix for {symbol}.") 
+        df = df_raw.reset_index(level=0, drop=True) 
+        df.rename(columns={ 
+            'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume' 
+        }, inplace=True) 
+        return df[['Open', 'High', 'Low', 'Close', 'Volume']] 
+    except Exception as e: 
+        logging.warning(f"⚠️ Data Feed Interruption on {symbol}: {e}. Retrying matrix loop...") 
+        return None 
 
-def calculate_trend_signals(df_input):
-    if df_input is None or df_input.empty:
-        return None
-    df = df_input.copy()
-    df['Volume'] = df['Volume'].replace(0, 1e-8)
-    df['Date_Day'] = df.index.date
-    df['Typical_Price'] = (df['High'] + df['Low'] + df['Close']) / 3.0
-    df['TP_Vol'] = df['Typical_Price'] * df['Volume']
-    df['Cum_TP_Vol'] = df.groupby('Date_Day')['TP_Vol'].cumsum()
-    df['Cum_Vol'] = df.groupby('Date_Day')['Volume'].cumsum()
-    df['VWAP'] = df['Cum_TP_Vol'] / df['Cum_Vol']
-    df['High_Low'] = df['High'] - df['Low']
-    df['High_Close_Prev'] = abs(df['High'] - df['Close'].shift(1))
-    df['Low_Close_Prev'] = abs(df['Low'] - df['Close'].shift(1))
-    
-    df['TR'] = df[['High_Low', 'High_Close_Prev', 'Low_Close_Prev']].max(axis=1)
-    df['ATR'] = df['TR'].rolling(window=20, min_periods=1).mean()
-    df['Asset_Norm_Vol'] = df['ATR'] / df['Close']
-    df['Fast_Trend_EMA'] = df['Close'].ewm(span=20, adjust=False).mean()
-    df['Limit_Buy_Target'] = df['VWAP'] + (0.3 * df['ATR'])
-    return df.ffill().bfill()
+def calculate_trend_signals(df_input): 
+    if df_input is None or df_input.empty or len(df_input) < 2: 
+        return None 
+    df = df_input.copy() 
+    df['Volume'] = df['Volume'].replace(0, 1e-8) 
+    df['Date_Day'] = df.index.date 
+    df['Typical_Price'] = (df['High'] + df['Low'] + df['Close']) / 3.0 
+    df['TP_Vol'] = df['Typical_Price'] * df['Volume'] 
+    df['Cum_TP_Vol'] = df.groupby('Date_Day')['TP_Vol'].cumsum() 
+    df['Cum_Vol'] = df.groupby('Date_Day')['Volume'].cumsum() 
+    df['VWAP'] = df['Cum_TP_Vol'] / df['Cum_Vol'] 
+    df['High_Low'] = df['High'] - df['Low'] 
+    df['High_Close_Prev'] = abs(df['High'] - df['Close'].shift(1)) 
+    df['Low_Close_Prev'] = abs(df['Low'] - df['Close'].shift(1)) 
+    df['TR'] = df[['High_Low', 'High_Close_Prev', 'Low_Close_Prev']].max(axis=1) 
+    df['ATR'] = df['TR'].rolling(window=20, min_periods=1).mean() 
+    df['Asset_Norm_Vol'] = df['ATR'] / df['Close'] 
+    df['Fast_Trend_EMA'] = df['Close'].ewm(span=20, adjust=False).mean() 
+    df['Limit_Buy_Target'] = df['VWAP'] + (0.3 * df['ATR']) 
+    return df.ffill().bfill() 
 
-# 4. BACKGROUND TRADING MATRIX LOOP
-def trading_loop():
-    global sim_cash, trade_counter, total_fees_paid
+# 4. BACKGROUND TRADING MATRIX LOOP (The Core State Machine)
+def trading_loop(): 
+    global sim_cash, trade_counter, total_fees_paid 
     
     time.sleep(5)  # Let the web server initialize completely first
-    logging.info(f"⚡ Velocity Alpha Engine Initializing Background Matrix...")
-    logging.info(f"💰 Target Starting Balance Pool: ${sim_cash:,.2f} USD")
-
-    while True:
-        if not ALPACA_API_KEY or "YOUR_" in ALPACA_API_KEY:
-            logging.info("🛑 Halt: Missing secure dashboard environment API variables.")
-            time.sleep(30)
-            continue
-
-        live_timestamp_str = datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')
-        logging.info(f"⏱️ Scan Event Matrix Initiated: {live_timestamp_str}")
-
-        for symbol in PORTFOLIO_SYMBOLS:
-            s = thread_states[symbol]
-            market_data = fetch_live_market_candles(symbol)
-            df_vectors = calculate_trend_signals(market_data)
-            if df_vectors is None:
-                continue
-
-            current_close = df_vectors['Close'].iloc[-1]
-            current_high = df_vectors['High'].iloc[-1]
-            current_low = df_vectors['Low'].iloc[-1]
-            current_atr = df_vectors['ATR'].iloc[-1]
-            current_ema = df_vectors['Fast_Trend_EMA'].iloc[-1]
-            current_norm_vol = df_vectors['Asset_Norm_Vol'].iloc[-1]
-            limit_buy_target = df_vectors['Limit_Buy_Target'].iloc[-2]
-
-            open_pnl = (s["position_qty"] * (current_close - s["buy_price"])) if s["is_holding"] else 0.0
-            logging.info(f" > [{symbol}] Market: ${current_close:,.2f} | Entry Goal: ${limit_buy_target:,.2f} | PnL: ${open_pnl:+,.2f}")
-
-            # --- EXIT PROCESSING CORE ---
-            if s["is_holding"]:
-                if current_high > s["highest_high_in_trade"]:
-                    s["highest_high_in_trade"] = current_high
-                target_profit_price = s["buy_price"] + (ATR_PROFIT_MULT * current_atr)
-                is_profit_extended = s["highest_high_in_trade"] > (s["buy_price"] + (2.0 * current_atr))
-                is_trailing_active = s["highest_high_in_trade"] > (s["buy_price"] + (3.5 * current_atr))
-
-                if is_trailing_active:
-                    target_stop_price = s["highest_high_in_trade"] - (1.5 * current_atr)
-                    reason_code = "TRAILING LOCK"
-                elif is_profit_extended:
-                    target_stop_price = s["buy_price"]
-                    reason_code = "BE SHIELD"
-                else:
-                    target_stop_price = s["buy_price"] - (ATR_STOP_MULT * current_atr)
-                    reason_code = "HARD STOP"
-
-                if current_high >= target_profit_price or current_low <= target_stop_price:
-                    exit_price = target_profit_price if current_high >= target_profit_price else target_stop_price
-                    
-                    exit_fee = (s["entry_cost"] * MARGIN_LEVERAGE) * FEE_RATE
-                    net_pnl = (s["entry_cost"] * ((exit_price - s["buy_price"]) / s["buy_price"]) * MARGIN_LEVERAGE) - exit_fee
-                    
-                    total_fees_paid += exit_fee
-                    sim_cash += s["entry_cost"] + net_pnl
-                    trade_counter += 1
-                    
-                    logging.info(f"🏁 [LIQUIDATION] -> Reason: {reason_code} | Net PnL: ${net_pnl:+.2f} | Wallet: ${sim_cash:,.2f}")
-                    s["is_holding"] = False
-                    s["position_qty"] = 0.0
-                    s["highest_high_in_trade"] = 0.0
-            
-            # --- ENTRY PROCESSING CORE ---
-            else:
-                if current_high >= limit_buy_target and (current_atr / current_close) >= 0.0010 and current_close > current_ema:
-                    rolling_kelly = 0.55 - ((1.0 - 0.55) / (ATR_PROFIT_MULT / ATR_STOP_MULT))
-                    calculated_entry = sim_cash * max(0.25, min(0.75, rolling_kelly * 0.5 * (1.3 if current_norm_vol > 0.0040 else 0.9)))
-                    if calculated_entry < 10.0:
-                        continue
-                    s["entry_cost"] = calculated_entry
-                    entry_fee = (s["entry_cost"] * MARGIN_LEVERAGE) * FEE_RATE
-                    sim_cash -= (s["entry_cost"] + entry_fee)
-                    total_fees_paid += entry_fee
-                    s["buy_price"] = limit_buy_target
-                    s["position_qty"] = (s["entry_cost"] * MARGIN_LEVERAGE) / s["buy_price"]
-                    s["highest_high_in_trade"] = current_close
-                    s["is_holding"] = True
-                    logging.info(f"🚀 [MARKET ENTRY] -> Allocated: ${s['entry_cost']:,.2f} into {symbol}")
-
-        active_positions_value = sum([thread_states[sym]["entry_cost"] for sym in PORTFOLIO_SYMBOLS if thread_states[sym]["is_holding"]])
-        logging.info(f"📊 Net Pool Equity: ${(sim_cash + active_positions_value):,.2f} | Total Session Fees: ${total_fees_paid:,.2f}")
-        time.sleep(POLLING_INTERVAL_SECONDS)
-
-if __name__ == '__main__':
-    # Start the core engine execution thread natively via root process mapping
-    t = threading.Thread(target=trading_loop, daemon=True)
-    t.start()
+    logging.info(f"⚡ Velocity Engine Live AUTHENTICATED-ALPACA Gateway Engaged...") 
+    logging.info(f"💰 Starting Capital: ${sim_cash:,.2f} USD | Dynamic Multi-Asset Focus: {PORTFOLIO_SYMBOLS}") 
     
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+    while True: 
+        if not ALPACA_API_KEY or "YOUR_" in ALPACA_API_KEY: 
+            logging.info("🛑 Initialization Halt: Please insert your genuine Alpaca API Keys in your environment parameters.") 
+            time.sleep(10) 
+            continue 
+        
+        live_timestamp_str = datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC') 
+        logging.info(f"⏱️ Scan Event Matrix Initiated: {live_timestamp_str}") 
+        
+        # Sequentially loop over all portfolio tickers matching script 2 architecture
+        for symbol in PORTFOLIO_SYMBOLS: 
+            s = thread_states[symbol] 
+            market_data = fetch_live_market_candles(symbol) 
+            df_vectors = calculate_trend_signals(market_data) 
+            
+            if df_vectors is None or len(df_vectors) < 2: 
+                continue 
+                
+            current_close = df_vectors['Close'].iloc[-1] 
+            current_high = df_vectors['High'].iloc[-1] 
+            current_low = df_vectors['Low'].iloc[-1] 
+            current_atr = df_vectors['ATR'].iloc[-1] 
+            current_ema = df_vectors['Fast_Trend_EMA'].iloc[-1] 
+            current_norm_vol = df_vectors['Asset_Norm_Vol'].iloc[-1] 
+            limit_buy_target = df_vectors['Limit_Buy_Target'].iloc[-2] 
+            
+            # Recalculate specific asset PnL for active positions
+            open_pnl = (s["position_qty"] * (current_close - s["buy_price"])) if s["is_holding"] else 0.0 
+            logging.info(f" > [{symbol}] Market: ${current_close:,.2f} | Entry Goal: ${limit_buy_target:,.2f} | Asset PnL: ${open_pnl:+,.2f}") 
+            
+            # --- MIMICKED EXIT PROCESSING CORE ---
+            if s["is_holding"]: 
+                if current_high > s["highest_high_in_trade"]: 
+                    s["highest_high_in_trade"] = current_high 
+                    
+                target_profit_price = s["buy_price"] + (ATR_PROFIT_MULT * current_atr) 
+                is_profit_extended = s["highest_high_in_trade"] > (s["buy_price"] + (2.0 * current_atr)) 
+                is_trailing_active = s["highest_high_in_trade"] > (s["buy_price"] + (3.5 * current_atr)) 
+                
+                if is_trailing_active: 
+                    target_stop_price = s["highest_high_in_trade"] - (1.5 * current_atr) 
+                    reason_code = "TRAILING LOCK" 
+                elif is_profit_extended: 
+                    target_stop_price = s["buy_price"] 
+                    reason_code = "BE SHIELD" 
+                else: 
+                    target_stop_price = s["buy_price"] - (ATR_STOP_MULT * current_atr) 
+                    reason_code = "HARD STOP" 
+                
+                if current_high >= target_profit_price or current_low <= target_stop_price: 
+                    exit_price = target_profit_price if current_high >= target_profit_price else target_stop_price 
+                    exit_reason = f"[{symbol}] VELOCITY PROFIT TARGET" if current_high >= target_profit_price else f"[{symbol}] {reason_code}" 
+                    
+                    net_pnl = (s["entry_cost"] * ((exit_price - s["buy_price"]) / s["buy_price"]) * MARGIN_LEVERAGE) - ((s["entry_cost"] * MARGIN_LEVERAGE) * FEE_RATE) 
+                    total_fees_paid += ((s["entry_cost"] * MARGIN_LEVERAGE) * FEE_RATE) 
+                    sim_cash += s["entry_cost"] + net_pnl 
+                    trade_counter += 1 
+                    
+                    logging.info(f"🏁 [VIRTUAL LIQUIDATION] -> Event: {exit_reason}") 
+                    logging.info(f"🎉 Trade #{trade_counter} Settled! Net PnL: ${net_pnl:+.2f} | Shared Wallet Cash: ${sim_cash:,.2f}") 
+                    
+                    s["is_holding"] = False 
+                    s["position_qty"] = 0.0 
+                    s["highest_high_in_trade"] = 0.0 
+                    
+            # --- MIMICKED ENTRY PROCESSING CORE ---
+            else: 
+                if current_high >= limit_buy_target and (current_atr / current_close) >= 0.0010 and current_close > current_ema: 
+                    rolling_kelly = 0.55 - ((1.0 - 0.55) / (ATR_PROFIT_MULT / ATR_STOP_MULT)) 
+                    calculated_entry = sim_cash * max(0.25, min(0.75, rolling_kelly * 0.5 * (1.3 if current_norm_vol > 0.0040 else 0.9))) 
+                    
+                    if calculated_entry < 10.0 and sim_cash >= 10.0: 
+                        calculated_entry = 10.0 
+                    elif calculated_entry < 10.0 and sim_cash < 10.0: 
+                        continue 
+                        
+                    s["entry_cost"] = calculated_entry 
+                    entry_fee = (s["entry_cost"] * MARGIN_LEVERAGE) * FEE_RATE 
+                    sim_cash -= (s["entry_cost"] + entry_fee) 
+                    total_fees_paid += entry_fee 
+                    
+                    s["buy_price"] = limit_buy_target 
+                    s["position_qty"] = (s["entry_cost"] * MARGIN_LEVERAGE) / s["buy_price"] 
+                    s["highest_high_in_trade"] = current_close 
