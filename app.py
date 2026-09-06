@@ -7,12 +7,12 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, UTC
 
-# 🌐 LIGHTWEIGHT WEB SERVER FOR RENDER.COM DEPLOYMENT
+# 🌐 LIGHTWEIGHT PRODUCTION WEB SERVER FOR RENDER.COM DEPLOYMENT
 try:
     from flask import Flask
     app = Flask(__name__)
     
-    # Configure logging so messages pass directly through Gunicorn to your Render screen
+    # Direct logging setup so metrics stream natively to your Render All Logs panel
     app.logger.setLevel(logging.INFO)
     stream_handler = logging.StreamHandler(sys.stdout)
     stream_handler.setLevel(logging.INFO)
@@ -38,7 +38,7 @@ except ImportError:
     print("❌ Critical Error: 'alpaca-py' library not detected.")
     sys.exit(1)
 
-# 1. CORE OPERATIONAL CONTROL CENTER (MULTI-ASSET MATRIX - UNFILTERED CODES)
+# 1. CORE OPERATIONAL CONTROL CENTER (MULTI-ASSET MATRIX - OPTIMIZED)
 PORTFOLIO_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD"]
 INITIAL_CASH = 1184.62         # Target Starting Capital
 MARGIN_LEVERAGE = 1.5          # Managed leverage to absorb 15-min noise
@@ -176,7 +176,7 @@ def trading_loop():
                     s["position_qty"] = 0.0
                     s["highest_high_in_trade"] = 0.0
             
-            # --- ENTRY PROCESSING CORE ---
+            # --- ENTRY PROCESSING CORE (EXACT LOGIC SPECIFIED) ---
             else:
                 if current_high >= limit_buy_target and (current_atr / current_close) >= 0.0010 and current_close > current_ema:
                     rolling_kelly = 0.55 - ((1.0 - 0.55) / (ATR_PROFIT_MULT / ATR_STOP_MULT))
