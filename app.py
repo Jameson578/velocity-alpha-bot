@@ -7,22 +7,23 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, UTC
 
-# 🌐 LIGHTWEIGHT PRODUCTION WEB SERVER FOR RENDER.COM DEPLOYMENT
+# Configure standard root logging to force output straight through Gunicorn onto your screen
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+
+# 🌐 LIGHTWEIGHT WEB SERVER FOR RENDER.COM DEPLOYMENT
 try:
     from flask import Flask
     app = Flask(__name__)
-    
-    # Direct logging setup so metrics stream natively to your Render All Logs panel
-    app.logger.setLevel(logging.INFO)
-    stream_handler = logging.StreamHandler(sys.stdout)
-    stream_handler.setLevel(logging.INFO)
-    app.logger.addHandler(stream_handler)
     
     @app.route('/')
     def health_check():
         return "Velocity Alpha Engine: ONLINE", 200
 except ImportError:
-    print("❌ Critical Error: 'Flask' library not detected.")
+    logging.error("❌ Critical Error: 'Flask' library not detected.")
     sys.exit(1)
 
 # 🌟 SECURE CONFIGURATION: Pulls keys safely from Render's Environment panel
@@ -35,10 +36,11 @@ try:
     from alpaca.data.requests import CryptoBarsRequest
     from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 except ImportError:
-    print("❌ Critical Error: 'alpaca-py' library not detected.")
+    logging.error("❌ Critical Error: 'alpaca-py' library not detected.")
     sys.exit(1)
 
-# 1. CORE OPERATIONAL CONTROL CENTER (MULTI-ASSET MATRIX - OPTIMIZED)
+# 1. CORE OPERATIONAL CONTROL CENTER (MULTI-ASSET MATRIX - COMPATIBLE FORMATS)
+# Changed to universal format "BTC/USD" but handled defensively in the data engine
 PORTFOLIO_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD"]
 INITIAL_CASH = 1184.62         # Target Starting Capital
 MARGIN_LEVERAGE = 1.5          # Managed leverage to absorb 15-min noise
@@ -67,25 +69,29 @@ if ALPACA_API_KEY and ALPACA_SECRET_KEY:
 
 # 3. TECHNICAL CONTEXT GENERATION ENGINES
 def fetch_live_market_candles(symbol):
-    """Pulls live 15-minute structural bars via Alpaca API."""
+    """Pulls live 15-minute structural bars via Alpaca API with multi-format fallback."""
     if not data_client:
         return None
     end_time = datetime.now(UTC)
     start_time = end_time - pd.Timedelta(hours=100)
-    request_params = CryptoBarsRequest(
-        symbol_or_symbols=symbol, timeframe=TimeFrame(15, TimeFrameUnit.Minute), start=start_time, end=end_time
-    )
-    try:
-        bars = data_client.get_crypto_bars(request_params)
-        df_raw = bars.df
-        if df_raw is None or df_raw.empty:
-            raise ValueError(f"Empty data matrix for {symbol}.")
-        df = df_raw.reset_index(level=0, drop=True)
-        df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume'}, inplace=True)
-        return df[['Open', 'High', 'Low', 'Close', 'Volume']]
-    except Exception as e:
-        app.logger.info(f"⚠️ Data Feed Interruption on {symbol}: {e}")
-        return None
+    
+    # Defensive Check: Try format arrays sequentially to bypass Alpaca dictionary locks
+    for test_symbol in [symbol, symbol.replace("/", ""), symbol.replace("/", "")] :
+        request_params = CryptoBarsRequest(
+            symbol_or_symbols=test_symbol, timeframe=TimeFrame(15, TimeFrameUnit.Minute), start=start_time, end=end_time
+        )
+        try:
+            bars = data_client.get_crypto_bars(request_params)
+            df_raw = bars.df
+            if df_raw is not None and not df_raw.empty:
+                df = df_raw.reset_index(level=0, drop=True)
+                df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume'}, inplace=True)
+                return df[['Open', 'High', 'Low', 'Close', 'Volume']]
+        except Exception:
+            continue
+            
+    logging.warning(f"⚠️ Data feed returned empty matrix or connection failed for {symbol}")
+    return None
 
 def calculate_trend_signals(df_input):
     if df_input is None or df_input.empty:
@@ -113,17 +119,18 @@ def calculate_trend_signals(df_input):
 def trading_loop():
     global sim_cash, trade_counter, total_fees_paid
     
-    app.logger.info(f"⚡ Velocity Alpha Engine Initializing Background Matrix...")
-    app.logger.info(f"💰 Target Starting Balance Pool: ${sim_cash:,.2f} USD")
+    time.sleep(5)  # Let the web server initialize completely first
+    logging.info(f"⚡ Velocity Alpha Engine Initializing Background Matrix...")
+    logging.info(f"💰 Target Starting Balance Pool: ${sim_cash:,.2f} USD")
 
     while True:
         if not ALPACA_API_KEY or "YOUR_" in ALPACA_API_KEY:
-            app.logger.info("🛑 Halt: Missing secure dashboard environment API variables.")
+            logging.info("🛑 Halt: Missing secure dashboard environment API variables.")
             time.sleep(30)
             continue
 
         live_timestamp_str = datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')
-        app.logger.info(f"⏱️ Scan Event Matrix Initiated: {live_timestamp_str}")
+        logging.info(f"⏱️ Scan Event Matrix Initiated: {live_timestamp_str}")
 
         for symbol in PORTFOLIO_SYMBOLS:
             s = thread_states[symbol]
@@ -141,7 +148,7 @@ def trading_loop():
             limit_buy_target = df_vectors['Limit_Buy_Target'].iloc[-2]
 
             open_pnl = (s["position_qty"] * (current_close - s["buy_price"])) if s["is_holding"] else 0.0
-            app.logger.info(f" > [{symbol}] Market: ${current_close:,.2f} | Entry Goal: ${limit_buy_target:,.2f} | PnL: ${open_pnl:+,.2f}")
+            logging.info(f" > [{symbol}] Market: ${current_close:,.2f} | Entry Goal: ${limit_buy_target:,.2f} | PnL: ${open_pnl:+,.2f}")
 
             # --- EXIT PROCESSING CORE ---
             if s["is_holding"]:
@@ -171,12 +178,12 @@ def trading_loop():
                     sim_cash += s["entry_cost"] + net_pnl
                     trade_counter += 1
                     
-                    app.logger.info(f"🏁 [LIQUIDATION] -> Reason: {reason_code} | Net PnL: ${net_pnl:+.2f} | Wallet: ${sim_cash:,.2f}")
+                    logging.info(f"🏁 [LIQUIDATION] -> Reason: {reason_code} | Net PnL: ${net_pnl:+.2f} | Wallet: ${sim_cash:,.2f}")
                     s["is_holding"] = False
                     s["position_qty"] = 0.0
                     s["highest_high_in_trade"] = 0.0
             
-            # --- ENTRY PROCESSING CORE (EXACT LOGIC SPECIFIED) ---
+            # --- ENTRY PROCESSING CORE ---
             else:
                 if current_high >= limit_buy_target and (current_atr / current_close) >= 0.0010 and current_close > current_ema:
                     rolling_kelly = 0.55 - ((1.0 - 0.55) / (ATR_PROFIT_MULT / ATR_STOP_MULT))
@@ -191,13 +198,14 @@ def trading_loop():
                     s["position_qty"] = (s["entry_cost"] * MARGIN_LEVERAGE) / s["buy_price"]
                     s["highest_high_in_trade"] = current_close
                     s["is_holding"] = True
-                    app.logger.info(f"🚀 [MARKET ENTRY] -> Allocated: ${s['entry_cost']:,.2f} into {symbol}")
+                    logging.info(f"🚀 [MARKET ENTRY] -> Allocated: ${s['entry_cost']:,.2f} into {symbol}")
 
         active_positions_value = sum([thread_states[sym]["entry_cost"] for sym in PORTFOLIO_SYMBOLS if thread_states[sym]["is_holding"]])
-        app.logger.info(f"📊 Net Pool Equity: ${(sim_cash + active_positions_value):,.2f} | Total Session Fees: ${total_fees_paid:,.2f}")
+        logging.info(f"📊 Net Pool Equity: ${(sim_cash + active_positions_value):,.2f} | Total Session Fees: ${total_fees_paid:,.2f}")
         time.sleep(POLLING_INTERVAL_SECONDS)
 
 if __name__ == '__main__':
+    # Start the core engine execution thread natively via root process mapping
     t = threading.Thread(target=trading_loop, daemon=True)
     t.start()
     
