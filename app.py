@@ -31,12 +31,12 @@ except ImportError:
     print("❌ Critical Error: 'alpaca-py' library not detected.")
     sys.exit(1)
 
-# 1. CORE OPERATIONAL CONTROL CENTER (MULTI-ASSET MATRIX - REVISED OPTIMIZED)
+# 1. CORE OPERATIONAL CONTROL CENTER (MULTI-ASSET MATRIX - UNFILTERED CODES)
 PORTFOLIO_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD"]
-INITIAL_CASH = 1184.62         # Target 3-Year Starting Capital
+INITIAL_CASH = 1184.62         # Target Starting Capital
 MARGIN_LEVERAGE = 1.5          # Managed leverage to absorb 15-min noise
-ATR_PROFIT_MULT = 2.5          # Optimized profit threshold to bank fast returns
-ATR_STOP_MULT = 2.5            # Widened stop boundary to eliminate shakeouts
+ATR_PROFIT_MULT = 2.5          # Optimized profit threshold to bank returns
+ATR_STOP_MULT = 2.5            # Widened stop boundary to eliminate noise shakeouts
 FEE_RATE = 0.0010
 POLLING_INTERVAL_SECONDS = 15
 
@@ -80,26 +80,6 @@ def fetch_live_market_candles(symbol):
         print(f"\n⚠️ Data Feed Interruption on {symbol}: {e}")
         sys.stdout.flush()
         return None
-
-def fetch_macro_trend_filter(symbol):
-    """Pulls Daily candles to calculate the 50-Day Macro EMA protection filter."""
-    if not data_client:
-        return False
-    end_time = datetime.now(UTC)
-    start_time = end_time - pd.Timedelta(days=150)
-    request_params = CryptoBarsRequest(
-        symbol_or_symbols=symbol, timeframe=TimeFrame(1, TimeFrameUnit.Day), start=start_time, end=end_time
-    )
-    try:
-        bars = data_client.get_crypto_bars(request_params)
-        df_raw = bars.df
-        if df_raw is None or df_raw.empty:
-            return False
-        df = df_raw.reset_index(level=0, drop=True)
-        macro_ema = df['close'].ewm(span=50, adjust=False).mean().iloc[-1]
-        return df['close'].iloc[-1] > macro_ema
-    except Exception:
-        return True
 
 def calculate_trend_signals(df_input):
     if df_input is None or df_input.empty:
@@ -156,9 +136,8 @@ def trading_loop():
             current_norm_vol = df_vectors['Asset_Norm_Vol'].iloc[-1]
             limit_buy_target = df_vectors['Limit_Buy_Target'].iloc[-2]
 
-            is_macro_bullish = fetch_macro_trend_filter(symbol)
             open_pnl = (s["position_qty"] * (current_close - s["buy_price"])) if s["is_holding"] else 0.0
-            print(f" > [{symbol}] Market: ${current_close:,.2f} | Macro: {'BULLISH' if is_macro_bullish else 'BEARISH (BLOCKED)'} | PnL: ${open_pnl:+,.2f}")
+            print(f" > [{symbol}] Market: ${current_close:,.2f} | Entry Goal: ${limit_buy_target:,.2f} | PnL: ${open_pnl:+,.2f}")
             sys.stdout.flush()
 
             # --- EXIT PROCESSING CORE ---
@@ -195,9 +174,9 @@ def trading_loop():
                     s["highest_high_in_trade"] = 0.0
                     sys.stdout.flush()
             
-            # --- ENTRY PROCESSING CORE ---
+            # --- ENTRY PROCESSING CORE (EMA FILTER REMOVED) ---
             else:
-                if is_macro_bullish and current_high >= limit_buy_target and (current_atr / current_close) >= 0.0010 and current_close > current_ema:
+                if current_high >= limit_buy_target and (current_atr / current_close) >= 0.0010 and current_close > current_ema:
                     rolling_kelly = 0.55 - ((1.0 - 0.55) / (ATR_PROFIT_MULT / ATR_STOP_MULT))
                     calculated_entry = sim_cash * max(0.25, min(0.75, rolling_kelly * 0.5 * (1.3 if current_norm_vol > 0.0040 else 0.9)))
                     if calculated_entry < 10.0:
@@ -220,3 +199,7 @@ def trading_loop():
 
 if __name__ == '__main__':
     t = threading.Thread(target=trading_loop, daemon=True)
+    t.start()
+    
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
