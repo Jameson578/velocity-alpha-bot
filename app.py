@@ -18,6 +18,7 @@ logging.basicConfig(
 try: 
     from flask import Flask 
     app = Flask(__name__) 
+    
     @app.route('/') 
     def health_check(): 
         return "Velocity Alpha Engine: ONLINE", 200 
@@ -26,7 +27,6 @@ except ImportError:
     sys.exit(1) 
 
 # 🌟 SECURE CONFIGURATION: Pulls keys safely from Render's Environment Variables panel
-# DO NOT hardcode your live keys here. Input them in your Render dashboard settings instead.
 ALPACA_API_KEY = os.getenv("ALPACA_API_KEY", "YOUR_ALPACA_API_KEY") 
 ALPACA_SECRET_KEY = os.getenv("ALPACA_SECRET_KEY", "YOUR_ALPACA_SECRET_KEY") 
 ACCOUNT_TYPE = "paper" 
@@ -39,7 +39,7 @@ except ImportError:
     logging.error("❌ Critical Error: 'alpaca-py' library not detected.") 
     sys.exit(1) 
 
-# 1. CORE OPERATIONAL CONTROL CENTER (Mimicking Script 2 Parameters)
+# 1. CORE OPERATIONAL CONTROL CENTER (Script 2 Parameters)
 PORTFOLIO_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD"] 
 INITIAL_CASH = 500.00 
 MARGIN_LEVERAGE = 1.5 
@@ -120,7 +120,7 @@ def calculate_trend_signals(df_input):
 def trading_loop(): 
     global sim_cash, trade_counter, total_fees_paid 
     
-    time.sleep(5)  # Let the web server initialize completely first
+    time.sleep(2)  # Short pause to let web server stabilize
     logging.info(f"⚡ Velocity Engine Live AUTHENTICATED-ALPACA Gateway Engaged...") 
     logging.info(f"💰 Starting Capital: ${sim_cash:,.2f} USD | Dynamic Multi-Asset Focus: {PORTFOLIO_SYMBOLS}") 
     
@@ -133,7 +133,6 @@ def trading_loop():
         live_timestamp_str = datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC') 
         logging.info(f"⏱️ Scan Event Matrix Initiated: {live_timestamp_str}") 
         
-        # Sequentially loop over all portfolio tickers matching script 2 architecture
         for symbol in PORTFOLIO_SYMBOLS: 
             s = thread_states[symbol] 
             market_data = fetch_live_market_candles(symbol) 
@@ -150,11 +149,10 @@ def trading_loop():
             current_norm_vol = df_vectors['Asset_Norm_Vol'].iloc[-1] 
             limit_buy_target = df_vectors['Limit_Buy_Target'].iloc[-2] 
             
-            # Recalculate specific asset PnL for active positions
             open_pnl = (s["position_qty"] * (current_close - s["buy_price"])) if s["is_holding"] else 0.0 
             logging.info(f" > [{symbol}] Market: ${current_close:,.2f} | Entry Goal: ${limit_buy_target:,.2f} | Asset PnL: ${open_pnl:+,.2f}") 
             
-            # --- MIMICKED EXIT PROCESSING CORE ---
+            # --- EXIT PROCESSING CORE ---
             if s["is_holding"]: 
                 if current_high > s["highest_high_in_trade"]: 
                     s["highest_high_in_trade"] = current_high 
@@ -189,7 +187,7 @@ def trading_loop():
                     s["position_qty"] = 0.0 
                     s["highest_high_in_trade"] = 0.0 
                     
-            # --- MIMICKED ENTRY PROCESSING CORE ---
+            # --- ENTRY PROCESSING CORE ---
             else: 
                 if current_high >= limit_buy_target and (current_atr / current_close) >= 0.0010 and current_close > current_ema: 
                     rolling_kelly = 0.55 - ((1.0 - 0.55) / (ATR_PROFIT_MULT / ATR_STOP_MULT)) 
@@ -208,3 +206,7 @@ def trading_loop():
                     s["buy_price"] = limit_buy_target 
                     s["position_qty"] = (s["entry_cost"] * MARGIN_LEVERAGE) / s["buy_price"] 
                     s["highest_high_in_trade"] = current_close 
+                    s["is_holding"] = True 
+                    
+                    logging.info("🚀 [VIRTUAL MARKET ENTRY ORDER EXECUTED]") 
+                    logging.info(f" Allocation: Buying {s['position_qty']:.4f} units of {symbol} at ${s['buy_price']:,.2f} using {MARGIN_LEVERAGE}x Leverage") 
