@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np 
 from datetime import datetime, UTC 
 
-# Configure standard root logging to force output straight through Gunicorn/Render dashboard
+# Configure standard root logging to force output straight through Gunicorn onto your Render screen
 logging.basicConfig( 
     level=logging.INFO, 
     format='%(asctime)s [%(levelname)s] %(message)s', 
@@ -26,7 +26,7 @@ except ImportError:
     logging.error("❌ Critical Error: 'Flask' library not detected.") 
     sys.exit(1) 
 
-# 🌟 SECURE CONFIGURATION: Pulls keys safely from Render's Environment Variables panel
+# 🌟 SECURE CONFIGURATION: Pulls keys safely from Render's Environment panel
 ALPACA_API_KEY = os.getenv("ALPACA_API_KEY", "YOUR_ALPACA_API_KEY") 
 ALPACA_SECRET_KEY = os.getenv("ALPACA_SECRET_KEY", "YOUR_ALPACA_SECRET_KEY") 
 ACCOUNT_TYPE = "paper" 
@@ -39,7 +39,7 @@ except ImportError:
     logging.error("❌ Critical Error: 'alpaca-py' library not detected.") 
     sys.exit(1) 
 
-# 1. CORE OPERATIONAL CONTROL CENTER (Script 2 Parameters)
+# 1. CORE OPERATIONAL CONTROL CENTER (MULTI-ASSET MATRIX - OPTIMIZED PARAMS)
 PORTFOLIO_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD"] 
 INITIAL_CASH = 500.00 
 MARGIN_LEVERAGE = 1.5 
@@ -48,12 +48,12 @@ ATR_STOP_MULT = 2.5
 FEE_RATE = 0.0010 
 POLLING_INTERVAL_SECONDS = 15 
 
-# 2. LOCAL SIMULATED PORTFOLIO MANAGEMENT STATE
+# 2. LOCAL SIMULATED PORTFOLIO MANAGEMENT STATE (SHARED MATRIX POOL)
 sim_cash = INITIAL_CASH 
 trade_counter = 0 
 total_fees_paid = 0.0 
 
-# Independent tracking dictionaries matching Script 2 format
+# Tracking dictionaries matching script 2 structure
 thread_states = {symbol: { 
     "is_holding": False, 
     "position_qty": 0.0, 
@@ -62,16 +62,15 @@ thread_states = {symbol: {
     "highest_high_in_trade": 0.0 
 } for symbol in PORTFOLIO_SYMBOLS} 
 
-# Initialize the data handshake client safely if keys exist
+# Initialize client placeholder
 data_client = None 
-if ALPACA_API_KEY and "YOUR_" not in ALPACA_API_KEY:
-    data_client = CryptoHistoricalDataClient(api_key=ALPACA_API_KEY, secret_key=ALPACA_SECRET_KEY) 
 
 # 3. LIVE MARKET DATA FETCH ENGINE
 def fetch_live_market_candles(symbol): 
     """Pulls genuine live 15-minute OHLCV bars for a specific pair via the authenticated Alpaca SDK.""" 
     if not data_client:
         return None
+        
     end_time = datetime.now(UTC) 
     start_time = end_time - pd.Timedelta(hours=100) 
     
@@ -116,23 +115,23 @@ def calculate_trend_signals(df_input):
     df['Limit_Buy_Target'] = df['VWAP'] + (0.3 * df['ATR']) 
     return df.ffill().bfill() 
 
-# 4. BACKGROUND TRADING MATRIX LOOP (The Core State Machine)
+# 4. CORE ENGINE LIVE EXECUTION STATE MACHINE
 def trading_loop(): 
     global sim_cash, trade_counter, total_fees_paid 
     
-    time.sleep(2)  # Short pause to let web server stabilize
     logging.info(f"⚡ Velocity Engine Live AUTHENTICATED-ALPACA Gateway Engaged...") 
     logging.info(f"💰 Starting Capital: ${sim_cash:,.2f} USD | Dynamic Multi-Asset Focus: {PORTFOLIO_SYMBOLS}") 
     
     while True: 
         if not ALPACA_API_KEY or "YOUR_" in ALPACA_API_KEY: 
-            logging.info("🛑 Initialization Halt: Please insert your genuine Alpaca API Keys in your environment parameters.") 
+            logging.info("🛑 Initialization Halt: Please insert your genuine Alpaca API Keys on your dashboard environment parameters.") 
             time.sleep(10) 
             continue 
         
         live_timestamp_str = datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC') 
         logging.info(f"⏱️ Scan Event Matrix Initiated: {live_timestamp_str}") 
         
+        # Loop sequentially over all portfolio tickers matching script 2 loop structure
         for symbol in PORTFOLIO_SYMBOLS: 
             s = thread_states[symbol] 
             market_data = fetch_live_market_candles(symbol) 
@@ -149,10 +148,11 @@ def trading_loop():
             current_norm_vol = df_vectors['Asset_Norm_Vol'].iloc[-1] 
             limit_buy_target = df_vectors['Limit_Buy_Target'].iloc[-2] 
             
+            # Recalculate specific asset PnL for active positions
             open_pnl = (s["position_qty"] * (current_close - s["buy_price"])) if s["is_holding"] else 0.0 
             logging.info(f" > [{symbol}] Market: ${current_close:,.2f} | Entry Goal: ${limit_buy_target:,.2f} | Asset PnL: ${open_pnl:+,.2f}") 
             
-            # --- EXIT PROCESSING CORE ---
+            # --- STRUCTURED EXIT LOGIC ---
             if s["is_holding"]: 
                 if current_high > s["highest_high_in_trade"]: 
                     s["highest_high_in_trade"] = current_high 
@@ -187,7 +187,7 @@ def trading_loop():
                     s["position_qty"] = 0.0 
                     s["highest_high_in_trade"] = 0.0 
                     
-            # --- ENTRY PROCESSING CORE ---
+            # --- STRUCTURED ENTRY LOGIC ---
             else: 
                 if current_high >= limit_buy_target and (current_atr / current_close) >= 0.0010 and current_close > current_ema: 
                     rolling_kelly = 0.55 - ((1.0 - 0.55) / (ATR_PROFIT_MULT / ATR_STOP_MULT)) 
@@ -210,3 +210,5 @@ def trading_loop():
                     
                     logging.info("🚀 [VIRTUAL MARKET ENTRY ORDER EXECUTED]") 
                     logging.info(f" Allocation: Buying {s['position_qty']:.4f} units of {symbol} at ${s['buy_price']:,.2f} using {MARGIN_LEVERAGE}x Leverage") 
+                    
+        # Calculate pool equity across shared context state
