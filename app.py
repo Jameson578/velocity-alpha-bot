@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np 
 from datetime import datetime, UTC 
 
-# Configure standard root logging to force output straight through Gunicorn onto your Render screen
+# Configure logging straight to standard output for immediate Render visibility
 logging.basicConfig( 
     level=logging.INFO, 
     format='%(asctime)s [%(levelname)s] %(message)s', 
@@ -120,8 +120,8 @@ def calculate_trend_signals(df_input):
 def trading_loop(): 
     global sim_cash, trade_counter, total_fees_paid 
     
-    # Force alignment sleep for worker configuration to lock complete logs
-    time.sleep(2)
+    # Wait briefly for web routing initialization
+    time.sleep(3)
     
     logging.info(f"⚡ Velocity Engine Live AUTHENTICATED-ALPACA Gateway Engaged...") 
     logging.info(f"💰 Starting Capital: ${sim_cash:,.2f} USD | Dynamic Multi-Asset Focus: {PORTFOLIO_SYMBOLS}") 
