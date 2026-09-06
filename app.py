@@ -27,8 +27,8 @@ except ImportError:
     sys.exit(1) 
 
 # 🌟 SECURE CONFIGURATION: Pulls keys safely from Render's Environment panel
-ALPACA_API_KEY = os.getenv("ALPACA_API_KEY", "YOUR_ALPACA_API_KEY") 
-ALPACA_SECRET_KEY = os.getenv("ALPACA_SECRET_KEY", "YOUR_ALPACA_SECRET_KEY") 
+ALPACA_API_KEY = os.getenv("ALPACA_API_KEY") 
+ALPACA_SECRET_KEY = os.getenv("ALPACA_SECRET_KEY") 
 ACCOUNT_TYPE = "paper" 
 
 try: 
@@ -69,6 +69,7 @@ data_client = None
 def fetch_live_market_candles(symbol): 
     """Pulls genuine live 15-minute OHLCV bars for a specific pair via the authenticated Alpaca SDK.""" 
     if not data_client:
+        logging.error(f"❌ [DATA ERROR] Client connection missing while attempting fetch for {symbol}")
         return None
         
     end_time = datetime.now(UTC) 
@@ -119,15 +120,15 @@ def calculate_trend_signals(df_input):
 def trading_loop(): 
     global sim_cash, trade_counter, total_fees_paid 
     
-    # Let the process context breathe before hitting structural loops
-    time.sleep(3)
+    # Force alignment sleep for worker configuration to lock complete logs
+    time.sleep(2)
     
     logging.info(f"⚡ Velocity Engine Live AUTHENTICATED-ALPACA Gateway Engaged...") 
     logging.info(f"💰 Starting Capital: ${sim_cash:,.2f} USD | Dynamic Multi-Asset Focus: {PORTFOLIO_SYMBOLS}") 
     
     while True: 
-        if not ALPACA_API_KEY or "YOUR_" in ALPACA_API_KEY: 
-            logging.info("🛑 Initialization Halt: Please insert your genuine Alpaca API Keys on your dashboard environment parameters.") 
+        if not ALPACA_API_KEY or "YOUR_" in str(ALPACA_API_KEY): 
+            logging.error("🛑 HALT DETECTED: ALPACA_API_KEY environmental variable is completely empty or using placeholder!") 
             time.sleep(10) 
             continue 
         
@@ -212,4 +213,3 @@ def trading_loop():
                     s["is_holding"] = True 
                     
                     logging.info("🚀 [VIRTUAL MARKET ENTRY ORDER EXECUTED]") 
-                    logging.info(f" Allocation: Buying {s['position_qty']:.4f} units of {symbol} at ${s['buy_price']:,.2f} using {MARGIN_LEVERAGE}x Leverage") 
