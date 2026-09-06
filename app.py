@@ -119,6 +119,9 @@ def calculate_trend_signals(df_input):
 def trading_loop(): 
     global sim_cash, trade_counter, total_fees_paid 
     
+    # Let the process context breathe before hitting structural loops
+    time.sleep(3)
+    
     logging.info(f"⚡ Velocity Engine Live AUTHENTICATED-ALPACA Gateway Engaged...") 
     logging.info(f"💰 Starting Capital: ${sim_cash:,.2f} USD | Dynamic Multi-Asset Focus: {PORTFOLIO_SYMBOLS}") 
     
@@ -210,5 +213,3 @@ def trading_loop():
                     
                     logging.info("🚀 [VIRTUAL MARKET ENTRY ORDER EXECUTED]") 
                     logging.info(f" Allocation: Buying {s['position_qty']:.4f} units of {symbol} at ${s['buy_price']:,.2f} using {MARGIN_LEVERAGE}x Leverage") 
-                    
-        # Calculate pool equity across shared context state
