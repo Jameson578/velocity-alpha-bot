@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import threading
+import logging
 import pandas as pd
 import numpy as np
 from datetime import datetime, UTC
@@ -10,6 +11,12 @@ from datetime import datetime, UTC
 try:
     from flask import Flask
     app = Flask(__name__)
+    
+    # Configure logging so messages pass directly through Gunicorn to your Render screen
+    app.logger.setLevel(logging.INFO)
+    stream_handler = logging.StreamHandler(sys.stdout)
+    stream_handler.setLevel(logging.INFO)
+    app.logger.addHandler(stream_handler)
     
     @app.route('/')
     def health_check():
@@ -77,8 +84,7 @@ def fetch_live_market_candles(symbol):
         df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume'}, inplace=True)
         return df[['Open', 'High', 'Low', 'Close', 'Volume']]
     except Exception as e:
-        print(f"\n⚠️ Data Feed Interruption on {symbol}: {e}")
-        sys.stdout.flush()
+        app.logger.info(f"⚠️ Data Feed Interruption on {symbol}: {e}")
         return None
 
 def calculate_trend_signals(df_input):
@@ -107,19 +113,17 @@ def calculate_trend_signals(df_input):
 def trading_loop():
     global sim_cash, trade_counter, total_fees_paid
     
-    print(f"⚡ Velocity Alpha Engine Initializing Background Matrix...")
-    print(f"💰 Target Starting Balance Pool: ${sim_cash:,.2f} USD")
-    sys.stdout.flush()
+    app.logger.info(f"⚡ Velocity Alpha Engine Initializing Background Matrix...")
+    app.logger.info(f"💰 Target Starting Balance Pool: ${sim_cash:,.2f} USD")
 
     while True:
         if not ALPACA_API_KEY or "YOUR_" in ALPACA_API_KEY:
-            print("\n🛑 Halt: Missing secure dashboard environment API variables.")
+            app.logger.info("🛑 Halt: Missing secure dashboard environment API variables.")
             time.sleep(30)
             continue
 
         live_timestamp_str = datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')
-        print(f"\n⏱️ Scan Event Matrix Initiated: {live_timestamp_str}")
-        sys.stdout.flush()
+        app.logger.info(f"⏱️ Scan Event Matrix Initiated: {live_timestamp_str}")
 
         for symbol in PORTFOLIO_SYMBOLS:
             s = thread_states[symbol]
@@ -137,8 +141,7 @@ def trading_loop():
             limit_buy_target = df_vectors['Limit_Buy_Target'].iloc[-2]
 
             open_pnl = (s["position_qty"] * (current_close - s["buy_price"])) if s["is_holding"] else 0.0
-            print(f" > [{symbol}] Market: ${current_close:,.2f} | Entry Goal: ${limit_buy_target:,.2f} | PnL: ${open_pnl:+,.2f}")
-            sys.stdout.flush()
+            app.logger.info(f" > [{symbol}] Market: ${current_close:,.2f} | Entry Goal: ${limit_buy_target:,.2f} | PnL: ${open_pnl:+,.2f}")
 
             # --- EXIT PROCESSING CORE ---
             if s["is_holding"]:
@@ -168,13 +171,12 @@ def trading_loop():
                     sim_cash += s["entry_cost"] + net_pnl
                     trade_counter += 1
                     
-                    print(f"🏁 [LIQUIDATION] -> Reason: {reason_code} | Net PnL: ${net_pnl:+.2f} | Wallet: ${sim_cash:,.2f}")
+                    app.logger.info(f"🏁 [LIQUIDATION] -> Reason: {reason_code} | Net PnL: ${net_pnl:+.2f} | Wallet: ${sim_cash:,.2f}")
                     s["is_holding"] = False
                     s["position_qty"] = 0.0
                     s["highest_high_in_trade"] = 0.0
-                    sys.stdout.flush()
             
-            # --- ENTRY PROCESSING CORE (EMA FILTER REMOVED) ---
+            # --- ENTRY PROCESSING CORE ---
             else:
                 if current_high >= limit_buy_target and (current_atr / current_close) >= 0.0010 and current_close > current_ema:
                     rolling_kelly = 0.55 - ((1.0 - 0.55) / (ATR_PROFIT_MULT / ATR_STOP_MULT))
@@ -189,12 +191,10 @@ def trading_loop():
                     s["position_qty"] = (s["entry_cost"] * MARGIN_LEVERAGE) / s["buy_price"]
                     s["highest_high_in_trade"] = current_close
                     s["is_holding"] = True
-                    print(f"🚀 [MARKET ENTRY] -> Allocated: ${s['entry_cost']:,.2f} into {symbol}")
-                    sys.stdout.flush()
+                    app.logger.info(f"🚀 [MARKET ENTRY] -> Allocated: ${s['entry_cost']:,.2f} into {symbol}")
 
         active_positions_value = sum([thread_states[sym]["entry_cost"] for sym in PORTFOLIO_SYMBOLS if thread_states[sym]["is_holding"]])
-        print(f"📊 Net Pool Equity: ${(sim_cash + active_positions_value):,.2f} | Total Session Fees: ${total_fees_paid:,.2f}")
-        sys.stdout.flush()
+        app.logger.info(f"📊 Net Pool Equity: ${(sim_cash + active_positions_value):,.2f} | Total Session Fees: ${total_fees_paid:,.2f}")
         time.sleep(POLLING_INTERVAL_SECONDS)
 
 if __name__ == '__main__':
