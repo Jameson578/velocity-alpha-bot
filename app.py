@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np 
 from datetime import datetime, UTC 
 
-# Configure standard root logging to force output straight onto your tracking console screen
+# Configure standard root logging to force output straight through Gunicorn onto your screen
 logging.basicConfig( 
     level=logging.INFO, 
     format='%(asctime)s [%(levelname)s] %(message)s', 
@@ -67,7 +67,7 @@ data_client = CryptoHistoricalDataClient(api_key=ALPACA_API_KEY, secret_key=ALPA
 def fetch_live_market_candles(symbol): 
     end_time = datetime.now(UTC) 
     start_time = end_time - pd.Timedelta(hours=100) 
-    clean_target_ticker = symbol.replace("/", "")
+    clean_target_ticker = symbol.replace("/", "") 
     
     try: 
         request_params = CryptoBarsRequest( 
@@ -200,13 +200,13 @@ def trading_loop():
                     logging.info("🚀 [VIRTUAL MARKET ENTRY ORDER EXECUTED]") 
                     logging.info(f" Allocation: Buying {s['position_qty']:.4f} units of {symbol} at ${s['buy_price']:,.2f} using {MARGIN_LEVERAGE}x Leverage") 
                     
-        # Shared metrics compilation output
-        active_positions_value = sum([thread_states[sym]["entry_cost"] for sym in PORTFOLIO_SYMBOLS if thread_states[sym]["is_holding"]])
+        # Shared metrics compilation output 
+        active_positions_value = sum([thread_states[sym]["entry_cost"] for sym in PORTFOLIO_SYMBOLS if thread_states[sym]["is_holding"]]) 
         net_portfolio_equity = sim_cash + active_positions_value 
         
         logging.info(f"📊 Matrix Wallet Cash: ${sim_cash:,.2f} | Net Pool Equity: ${net_portfolio_equity:,.2f} | Total Session Fees: ${total_fees_paid:,.2f}") 
         time.sleep(POLLING_INTERVAL_SECONDS) 
 
 
-# 🌟 EXPLICIT SINGLE-FILE RUNTIME DISPATCH HOOK
-if not any(t.name == "VelocityMatrixThread" for t in threading.enumerate()): 
+# 🌟 PRODUCTION BACKGROUND AUTOMATIC DISPATCH ENGINE 
+# Fires detached automatically immediately upon process generation mapping 
