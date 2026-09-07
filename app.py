@@ -18,6 +18,7 @@ logging.basicConfig(
 try:
     from flask import Flask
     app = Flask(__name__)
+
     @app.route('/')
     def health_check():
         return "Velocity Alpha Monolith Engine: ONLINE", 200
@@ -125,6 +126,7 @@ def trading_loop():
                 s = thread_states[symbol]
                 clean_ticker = symbol.replace("/", "")
                 is_holding = clean_ticker in holding_symbols
+                
                 market_data = fetch_live_market_candles(symbol)
                 df_vectors = calculate_trend_signals(market_data)
                 
@@ -145,6 +147,7 @@ def trading_loop():
                 if is_holding:
                     position_details = next(p for p in active_positions if p.symbol == clean_ticker)
                     position_qty = abs(float(position_details.qty))
+                    
                     if current_high > s["highest_high_in_trade"] or s["buy_price"] == 0:
                         s["highest_high_in_trade"] = current_high
                         s["buy_price"] = float(position_details.avg_entry_price)
@@ -182,6 +185,7 @@ def trading_loop():
                     if current_high >= limit_buy_target or True:
                         rolling_kelly = 0.55 - ((1.0 - 0.55) / (ATR_PROFIT_MULT / ATR_STOP_MULT))
                         calculated_entry = current_cash * max(0.25, min(0.75, rolling_kelly * 0.5 * (1.3 if current_norm_vol > 0.0040 else 0.9)))
+                        
                         if calculated_entry < 15.0 or current_cash < 20.0:
                             continue
                             
@@ -196,8 +200,9 @@ def trading_loop():
                         s["buy_price"] = current_close
                         s["highest_high_in_trade"] = current_close
 
-            # Throttle loop iterations safely according to config parameters
+        except Exception as e:
+            logging.error(f"❌ Core Error inside main engine matrix: {e}")
+            
+        finally:
             time.sleep(POLLING_INTERVAL_SECONDS)
 
-        except Exception as loop_error:
-            # ✅ Added safety handler block to fix the structural syntax mistake
