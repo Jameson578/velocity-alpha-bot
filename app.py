@@ -7,12 +7,24 @@ import pandas as pd
 import numpy as np 
 from datetime import datetime, UTC 
 
-# Configure standard root logging for crisp terminal tracking
+# Configure standard root logging straight to the standard output stream
 logging.basicConfig( 
     level=logging.INFO, 
     format='%(asctime)s [%(levelname)s] %(message)s', 
     handlers=[logging.StreamHandler(sys.stdout)] 
 ) 
+
+# 🌐 LIGHTWEIGHT WEB SERVER DEFINED AT THE TOP FOR NATIVE REGISTRATION
+try: 
+    from flask import Flask 
+    app = Flask(__name__) 
+    
+    @app.route('/') 
+    def health_check(): 
+        return "Velocity Alpha Standalone Engine: ONLINE", 200 
+except ImportError: 
+    logging.error("❌ Critical Error: 'Flask' library not detected.") 
+    sys.exit(1) 
 
 # 🔐 DIRECT PRODUCTION PARAMETERS MAP
 ALPACA_API_KEY = "PKGV2SNFX6ABDXTQQ25ZFQHGLN"
@@ -22,7 +34,7 @@ ACCOUNT_TYPE = "paper"
 try: 
     from alpaca.data.historical import CryptoHistoricalDataClient 
     from alpaca.data.requests import CryptoBarsRequest 
-    from alpaca.data.timeframe import TimeFrame, TimeFrameUnit 
+    from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 except ImportError: 
     logging.error("❌ Critical Error: 'alpaca-py' library not detected.") 
     sys.exit(1) 
@@ -95,9 +107,12 @@ def calculate_trend_signals(df_input):
     df['Limit_Buy_Target'] = df['VWAP'] + (0.3 * df['ATR']) 
     return df.ffill().bfill() 
 
-# 4. CORE ENGINE STANDALONE RUNTIME LOOP
-def execute_algorithmic_scanner(): 
+# 4. CORE ENGINE LIVE EXECUTION STATE MACHINE
+def trading_loop(): 
     global sim_cash, trade_counter, total_fees_paid 
+    
+    # Wait briefly for parent container worker context to map out log links
+    time.sleep(3) 
     
     logging.info(f"⚡ Velocity Engine Live AUTHENTICATED-ALPACA Standalone Gateway Engaged...") 
     logging.info(f"💰 Starting Capital: ${sim_cash:,.2f} USD | Dynamic Multi-Asset Focus: {PORTFOLIO_SYMBOLS}") 
@@ -190,6 +205,7 @@ def execute_algorithmic_scanner():
         logging.info(f"📊 Matrix Wallet Cash: ${sim_cash:,.2f} | Net Pool Equity: ${net_portfolio_equity:,.2f} | Total Session Fees: ${total_fees_paid:,.2f}") 
         time.sleep(POLLING_INTERVAL_SECONDS) 
 
-if __name__ == '__main__': 
-    # Force instant process initialization loop execution
-    execute_algorithmic_scanner()
+
+# 🌟 NATIVE BOOT INITIALIZATION MATRIX (BYPASSES WEB INTERCEPT RESTRAINTS)
+# Spawns the worker scanning loop thread natively upon application execution frame mounting.
+if not any(t.name == "VelocityMatrixThread" for t in threading.enumerate()): 
