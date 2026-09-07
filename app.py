@@ -14,13 +14,15 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)] 
 ) 
 
-# 🌐 LIGHTWEIGHT WEB SERVER FOR RENDER.COM DEPLOYMENT
+# 🌐 LIGHTWEIGHT WEB SERVER WITH CORE AUTO-IGNITION LINK
 try: 
     from flask import Flask 
     app = Flask(__name__) 
     
     @app.route('/') 
     def health_check(): 
+        # Safely intercept Render's startup web ping to trigger the persistent engine loop
+        ignite_trading_matrix_on_worker()
         return "Velocity Alpha Engine: ONLINE", 200 
 except ImportError: 
     logging.error("❌ Critical Error: 'Flask' library not detected.") 
@@ -39,7 +41,7 @@ except ImportError:
     logging.error("❌ Critical Error: 'alpaca-py' library not detected.") 
     sys.exit(1) 
 
-# 1. CORE OPERATIONAL CONTROL CENTER (MULTI-ASSET PARAMETERS MATCHING SCRIPT 2)
+# 1. CORE OPERATIONAL CONTROL CENTER
 PORTFOLIO_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD"] 
 INITIAL_CASH = 500.00 
 MARGIN_LEVERAGE = 1.5 
@@ -48,7 +50,7 @@ ATR_STOP_MULT = 2.5
 FEE_RATE = 0.0010 
 POLLING_INTERVAL_SECONDS = 15 
 
-# 2. LOCAL SIMULATED PORTFOLIO MANAGEMENT STATE (SHARED MATRIX POOL)
+# 2. LOCAL SIMULATED PORTFOLIO MANAGEMENT STATE
 sim_cash = INITIAL_CASH 
 trade_counter = 0 
 total_fees_paid = 0.0 
@@ -69,7 +71,7 @@ def fetch_live_market_candles(symbol):
     start_time = end_time - pd.Timedelta(hours=100) 
     
     try: 
-        # Keyword-mapped TimeFrame parameter configuration to eliminate SDK crashes
+        # Keyword-mapped TimeFrame variables to completely stabilize the connection process
         request_params = CryptoBarsRequest( 
             symbol_or_symbols=symbol, 
             timeframe=TimeFrame(amount=15, unit=TimeFrameUnit.Minute), 
@@ -112,8 +114,8 @@ def calculate_trend_signals(df_input):
 def trading_loop(): 
     global sim_cash, trade_counter, total_fees_paid 
     
-    # Let process worker containers complete binding sequences
-    time.sleep(5) 
+    # Allow the Gunicorn runtime worker framework to finish tracking initialization routines
+    time.sleep(3) 
     
     logging.info(f"⚡ Velocity Engine Live AUTHENTICATED-ALPACA Gateway Engaged...") 
     logging.info(f"💰 Starting Capital: ${sim_cash:,.2f} USD | Dynamic Multi-Asset Focus: {PORTFOLIO_SYMBOLS}") 
@@ -200,13 +202,11 @@ def trading_loop():
                     logging.info("🚀 [VIRTUAL MARKET ENTRY ORDER EXECUTED]") 
                     logging.info(f" Allocation: Buying {s['position_qty']:.4f} units of {symbol} at ${s['buy_price']:,.2f} using {MARGIN_LEVERAGE}x Leverage") 
                     
-        # Shared metrics compilation output
+        # Compiling pool session metrics
         active_positions_value = sum([thread_states[sym]["entry_cost"] for sym in PORTFOLIO_SYMBOLS if thread_states[sym]["is_holding"]])
         net_portfolio_equity = sim_cash + active_positions_value 
         
         logging.info(f"📊 Matrix Wallet Cash: ${sim_cash:,.2f} | Net Pool Equity: ${net_portfolio_equity:,.2f} | Total Session Fees: ${total_fees_paid:,.2f}") 
         time.sleep(POLLING_INTERVAL_SECONDS) 
 
-
-# 🌟 PRODUCTION BACKGROUND RUNTIME DISPATCHER
-# Spawns automatically on process fork without cross-file dependencies
+# --- SAFE WORKER INTERCEPT HOOK LAYER ---
