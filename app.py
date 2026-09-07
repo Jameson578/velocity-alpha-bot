@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np 
 from datetime import datetime, UTC 
 
-# Configure standard root logging straight to the standard output stream
+# Configure standard root logging to force output straight through Gunicorn onto your screen
 logging.basicConfig( 
     level=logging.INFO, 
     format='%(asctime)s [%(levelname)s] %(message)s', 
@@ -26,9 +26,10 @@ except ImportError:
     logging.error("❌ Critical Error: 'Flask' library not detected.") 
     sys.exit(1) 
 
-# Global credentials fields updated on engine boot execution
-ALPACA_API_KEY = None 
-ALPACA_SECRET_KEY = None 
+# 🔐 DIRECT PRODUCTION PARAMETERS MAP
+# Hardcoded within the active process frame to ensure instant multi-process access
+ALPACA_API_KEY = "PKGV2SNFX6ABDXTQQ25ZFQHGLN"
+ALPACA_SECRET_KEY = "Bo2QTdwmDcXvZ8v3Vkttf8H1GwKFKxmXzTJ4B3nJDLrT"
 ACCOUNT_TYPE = "paper" 
 
 try: 
@@ -39,7 +40,7 @@ except ImportError:
     logging.error("❌ Critical Error: 'alpaca-py' library not detected.") 
     sys.exit(1) 
 
-# 1. CORE OPERATIONAL CONTROL CENTER 
+# 1. CORE OPERATIONAL CONTROL CENTER
 PORTFOLIO_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD"] 
 INITIAL_CASH = 500.00 
 MARGIN_LEVERAGE = 1.5 
@@ -48,7 +49,7 @@ ATR_STOP_MULT = 2.5
 FEE_RATE = 0.0010 
 POLLING_INTERVAL_SECONDS = 15 
 
-# 2. LOCAL SIMULATED PORTFOLIO STATE MANAGEMENT
+# 2. LOCAL SIMULATED PORTFOLIO MANAGEMENT STATE
 sim_cash = INITIAL_CASH 
 trade_counter = 0 
 total_fees_paid = 0.0 
@@ -61,16 +62,12 @@ thread_states = {symbol: {
     "highest_high_in_trade": 0.0 
 } for symbol in PORTFOLIO_SYMBOLS} 
 
-data_client = None 
+# 3. LIVE MARKET DATA FETCH CLIENT
+data_client = CryptoHistoricalDataClient(api_key=ALPACA_API_KEY, secret_key=ALPACA_SECRET_KEY)
 
-# 3. LIVE MARKET DATA FETCH ENGINE
 def fetch_live_market_candles(symbol): 
-    if not data_client:
-        return None
-        
     end_time = datetime.now(UTC) 
     start_time = end_time - pd.Timedelta(hours=100) 
-    
     request_params = CryptoBarsRequest( 
         symbol_or_symbols=symbol, 
         timeframe=TimeFrame(15, TimeFrameUnit.Minute), 
@@ -113,15 +110,13 @@ def calculate_trend_signals(df_input):
 def trading_loop(): 
     global sim_cash, trade_counter, total_fees_paid 
     
+    # Allow the Gunicorn runtime worker initialization to settle completely first
+    time.sleep(5)
+    
     logging.info(f"⚡ Velocity Engine Live AUTHENTICATED-ALPACA Gateway Engaged...") 
-    logging.info(f"💰 Starting Capital: ${sim_cash:,.2f} USD | Focus Assets: {PORTFOLIO_SYMBOLS}") 
+    logging.info(f"💰 Starting Capital: ${sim_cash:,.2f} USD | Dynamic Multi-Asset Focus: {PORTFOLIO_SYMBOLS}") 
     
     while True: 
-        if not ALPACA_API_KEY or "YOUR_" in str(ALPACA_API_KEY): 
-            logging.error("🛑 HALT DETECTED: ALPACA_API_KEY parameters are structurally unpopulated!") 
-            time.sleep(10) 
-            continue 
-        
         live_timestamp_str = datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC') 
         logging.info(f"⏱️ Scan Event Matrix Initiated: {live_timestamp_str}") 
         
@@ -203,21 +198,15 @@ def trading_loop():
                     logging.info("🚀 [VIRTUAL MARKET ENTRY ORDER EXECUTED]") 
                     logging.info(f" Allocation: Buying {s['position_qty']:.4f} units of {symbol} at ${s['buy_price']:,.2f} using {MARGIN_LEVERAGE}x Leverage") 
                     
-        active_positions_value = sum([thread_states[sym]["entry_cost"] for sym in PORTFOLIO_SYMBOLS if thread_states[sym]["is_holding"]]) 
+        # Calculate pool equity across shared context state
+        active_positions_value = sum([thread_states[sym]["entry_cost"] for sym in PORTFOLIO_SYMBOLS if thread_states[sym]["is_holding"]])
         net_portfolio_equity = sim_cash + active_positions_value 
         
         logging.info(f"📊 Matrix Wallet Cash: ${sim_cash:,.2f} | Net Pool Equity: ${net_portfolio_equity:,.2f} | Total Session Fees: ${total_fees_paid:,.2f}") 
         time.sleep(POLLING_INTERVAL_SECONDS) 
 
 
-# 🌟 EXPLICIT EXPORT DECLARATION HOOK FOR GUNICORN RUNTIME
-def ignite_engine_matrix_loop():
-    """
-    Explicit initialization routine mapped to the custom Gunicorn lifecycle framework hook.
-    """
-    global data_client, ALPACA_API_KEY, ALPACA_SECRET_KEY
-    
-    # 🔐 DIRECT PRODUCTION PARAMETERS MAP
-    ALPACA_API_KEY = "PKGV2SNFX6ABDXTQQ25ZFQHGLN"
-    ALPACA_SECRET_KEY = "Bo2QTdwmDcXvZ8v3Vkttf8H1GwKFKxmXzTJ4B3nJDLrT"
-    
+# 🌟 PRODUCTION BACKGROUND DEPLOYMENT IGNITION
+# Spawns the worker thread automatically the instant Gunicorn imports the app workspace
+if not any(t.name == "VelocityMatrixThread" for t in threading.enumerate()): 
+    logging.info("🚀 System Instance Loaded. Launching Quantitative Engine Thread Detached...") 
