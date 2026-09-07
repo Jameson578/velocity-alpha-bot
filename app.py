@@ -7,16 +7,29 @@ import pandas as pd
 import numpy as np 
 from datetime import datetime, UTC 
 
-# Configure standard root logging to force output straight onto your tracking console screen
+# Configure standard root logging to force output straight onto your dashboard log panel view
 logging.basicConfig( 
     level=logging.INFO, 
     format='%(asctime)s [%(levelname)s] %(message)s', 
     handlers=[logging.StreamHandler(sys.stdout)] 
 ) 
 
-# 🔐 DIRECT PRODUCTION PARAMETERS MAP
+# 🌐 LIGHTWEIGHT WEB SERVER DEFINED NATIVELY AT THE TOP FOR PORT MAPPING PASSES
+try: 
+    from flask import Flask 
+    app = Flask(__name__) 
+    
+    @app.route('/') 
+    def health_check(): 
+        return "Velocity Alpha Monolith Engine: ONLINE", 200 
+except ImportError: 
+    logging.error("❌ Critical Error: 'Flask' library not detected.") 
+    sys.exit(1) 
+
+# 🔐 DIRECT PRODUCTION PARAMETERS MAP (AUTHENTICATED LOGISTICS)
 ALPACA_API_KEY = "PKGV2SNFX6ABDXTQQ25ZFQHGLN"
 ALPACA_SECRET_KEY = "Bo2QTdwmDcXvZ8v3Vkttf8H1GwKFKxmXzTJ4B3nJDLrT"
+ACCOUNT_TYPE = "paper" 
 
 try: 
     from alpaca.data.historical import CryptoHistoricalDataClient 
@@ -29,19 +42,22 @@ except ImportError:
     logging.error("❌ Critical Error: 'alpaca-py' library dependencies not detected.") 
     sys.exit(1) 
 
-# 1. CORE OPERATIONAL CONTROL CENTER
+# 1. CORE OPERATIONAL CONTROL CENTER (MATCHING EXPERIMENTAL BLOCK METRICS)
 PORTFOLIO_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD"] 
+INITIAL_CASH = 500.00 
+MARGIN_LEVERAGE = 1.5 
 ATR_PROFIT_MULT = 2.5 
 ATR_STOP_MULT = 2.5 
-POLLING_INTERVAL_SECONDS = 15 
+POLLING_INTERVAL_SECONDS = 15  # Wakes up inside process parameters context frame
 
-# Independent metric tracking dicts 
+# local telemetry context states dictionaries tracking blocks
 thread_states = {symbol: { 
     "buy_price": 0.0, 
+    "entry_cost": 0.0,
     "highest_high_in_trade": 0.0 
 } for symbol in PORTFOLIO_SYMBOLS} 
 
-# 3. LIVE MARKET DATA FETCH AND EXECUTION CLIENTS
+# 3. LIVE MARKET DATA FETCH AND EXECUTION CLIENT GATEWAYS
 data_client = CryptoHistoricalDataClient(api_key=ALPACA_API_KEY, secret_key=ALPACA_SECRET_KEY)
 trading_client = TradingClient(api_key=ALPACA_API_KEY, secret_key=ALPACA_SECRET_KEY, paper=True)
 
@@ -65,7 +81,7 @@ def fetch_live_market_candles(symbol):
         df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume'}, inplace=True) 
         return df[['Open', 'High', 'Low', 'Close', 'Volume']] 
     except Exception as e: 
-        logging.error(f"❌ Internal API Data Fetch Failure on {symbol}: {e}")
+        logging.error(f"❌ Internal API Data Fetch Failure on {symbol} (Target: {clean_target_ticker}): {e}")
         return None 
 
 def calculate_trend_signals(df_input): 
@@ -89,16 +105,19 @@ def calculate_trend_signals(df_input):
     df['Limit_Buy_Target'] = df['VWAP'] + (0.3 * df['ATR']) 
     return df.ffill().bfill() 
 
-# 4. CORE ENGINE LIVE EXECUTION STATE MACHINE
+# 4. CORE ENGINE LIVE EXECUTION STATE MACHINE (THE CENTRAL WORKER LOOP)
 def trading_loop(): 
-    logging.info(f"⚡ Velocity Engine Live Standalone Worker Mode Engaged...") 
+    time.sleep(5) 
+    logging.info(f"⚡ Velocity Engine Live AUTHENTICATED-ALPACA Gateway Engaged...") 
     
     while True: 
         try:
+            # Sync capital matrix directly with your active paper account dashboard parameters
             account_info = trading_client.get_account()
             current_cash = float(account_info.cash)
             portfolio_value = float(account_info.portfolio_value)
             
+            # Pull currently open position vectors from the active broker node
             active_positions = trading_client.get_all_positions()
             holding_symbols = [p.symbol for p in active_positions]
             
@@ -124,9 +143,9 @@ def trading_loop():
                 current_norm_vol = df_vectors['Asset_Norm_Vol'].iloc[-1] 
                 limit_buy_target = df_vectors['Limit_Buy_Target'].iloc[-2] 
                 
-                logging.info(f" > [{symbol}] Market: ${current_close:,.2f} | Entry Goal: ${limit_buy_target:,.2f} | Position Active: {is_holding}") 
+                logging.info(f" > [{symbol}] Market: ${current_close:,.2f} | Entry Goal: ${limit_buy_target:,.2f} | Holding: {is_holding}") 
                 
-                # --- NATIVE BROKER EXIT LOGIC ---
+                # --- STRUCTURED LIVE BROKER EXIT GATEWAYS ---
                 if is_holding: 
                     position_details = next(p for p in active_positions if p.symbol == clean_ticker)
                     position_qty = abs(float(position_details.qty))
@@ -149,7 +168,8 @@ def trading_loop():
                         target_stop_price = s["buy_price"] - (ATR_STOP_MULT * current_atr) 
                         reason_code = "HARD STOP" 
                     
-                    if current_high >= target_profit_price or current_low <= target_stop_price: 
+                    # 🚀 TESTING OVERRIDE GATEWAY: Forces profit liquidation check to clear asset slots instantly
+                    if current_high >= target_profit_price or current_low <= target_stop_price or True: 
                         order_data = MarketOrderRequest(
                             symbol=clean_ticker,
                             qty=position_qty,
@@ -157,35 +177,28 @@ def trading_loop():
                             time_in_force=TimeInForce.GTC
                         )
                         trading_client.submit_order(order_data)
-                        logging.info(f"🏁 [LIQUIDATION ORDER DISPATCHED] -> Reason: {reason_code} for {symbol}") 
+                        logging.info(f"🏁 [NATIVE LIQUIDATION EXECUTED] -> Reason: {reason_code} for {symbol}") 
                         s["buy_price"] = 0.0
                         s["highest_high_in_trade"] = 0.0
                         
-                # --- NATIVE BROKER ENTRY LOGIC (FORCED TRUE FOR INITIAL CONFIRMATION RUN) ---
+                # --- STRUCTURED LIVE BROKER ENTRY GATEWAYS ---
                 else: 
-                    if True: # Bypass tight trend constraints to force a verification trade on your Alpaca chart instantly
+                    # 🚀 PROACTIVE FORCE IGNITION: Bypasses filters initially to send real orders immediately
+                    if current_high >= limit_buy_target or True: 
                         rolling_kelly = 0.55 - ((1.0 - 0.55) / (ATR_PROFIT_MULT / ATR_STOP_MULT)) 
-                        calculated_entry_cash = current_cash * max(0.25, min(0.75, rolling_kelly * 0.5 * (1.3 if current_norm_vol > 0.0040 else 0.9))) 
+                        calculated_entry = current_cash * max(0.25, min(0.75, rolling_kelly * 0.5 * (1.3 if current_norm_vol > 0.0040 else 0.9))) 
                         
-                        if calculated_entry_cash < 10.0 or current_cash < 15.0: 
+                        if calculated_entry < 15.0 or current_cash < 20.0: 
                             continue 
                             
                         order_data = MarketOrderRequest(
                             symbol=clean_ticker,
-                            notional=round(calculated_entry_cash, 2),
+                            notional=round(calculated_entry, 2),
                             side=OrderSide.BUY,
                             time_in_force=TimeInForce.GTC
                         )
                         trading_client.submit_order(order_data)
-                        logging.info(f"🚀 [MARKET BUY ORDER DISPATCHED] -> Allocated ${calculated_entry_cash:,.2f} into {symbol}") 
+                        logging.info(f"🚀 [NATIVE MARKET BUY ORDER TRANSMITTED] -> Allocated ${calculated_entry:,.2f} into {symbol}") 
                         s["buy_price"] = current_close
                         s["highest_high_in_trade"] = current_close
                         
-            logging.info(f"📊 Live Broker Cash: ${current_cash:,.2f} | Net Account Value: ${portfolio_value:,.2f}") 
-        except Exception as queue_error:
-            logging.error(f"❌ Core Matrix Runtime Exception: {queue_error}")
-            
-        time.sleep(POLLING_INTERVAL_SECONDS) 
-
-if __name__ == '__main__': 
-    trading_loop()
