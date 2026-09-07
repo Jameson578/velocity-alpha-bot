@@ -7,24 +7,12 @@ import pandas as pd
 import numpy as np 
 from datetime import datetime, UTC 
 
-# Configure standard root logging to force output straight onto your tracking console screen
+# Configure standard root logging to force output straight through Gunicorn onto your screen
 logging.basicConfig( 
     level=logging.INFO, 
     format='%(asctime)s [%(levelname)s] %(message)s', 
     handlers=[logging.StreamHandler(sys.stdout)] 
 ) 
-
-# 🌐 LIGHTWEIGHT WEB SERVER DEFINED NATIVELY AT THE TOP FOR PORT MAPPING PASSES
-try: 
-    from flask import Flask 
-    app = Flask(__name__) 
-    
-    @app.route('/') 
-    def health_check(): 
-        return "Velocity Alpha Monolith Engine: ONLINE", 200 
-except ImportError: 
-    logging.error("❌ Critical Error: 'Flask' library not detected.") 
-    sys.exit(1) 
 
 # 🔐 DIRECT PRODUCTION PARAMETERS MAP
 ALPACA_API_KEY = "PKGV2SNFX6ABDXTQQ25ZFQHGLN"
@@ -112,9 +100,7 @@ def calculate_trend_signals(df_input):
 def trading_loop(): 
     global sim_cash, trade_counter, total_fees_paid 
     
-    # Allow parent Gunicorn framework context worker layers to fully settle log streams
-    time.sleep(5) 
-    
+    time.sleep(3) 
     logging.info(f"⚡ Velocity Engine Live AUTHENTICATED-ALPACA Gateway Engaged...") 
     logging.info(f"💰 Starting Capital: ${sim_cash:,.2f} USD | Dynamic Multi-Asset Focus: {PORTFOLIO_SYMBOLS}") 
     
@@ -200,13 +186,24 @@ def trading_loop():
                     logging.info("🚀 [VIRTUAL MARKET ENTRY ORDER EXECUTED]") 
                     logging.info(f" Allocation: Buying {s['position_qty']:.4f} units of {symbol} at ${s['buy_price']:,.2f} using {MARGIN_LEVERAGE}x Leverage") 
                     
-        # Shared metrics compilation output 
-        active_positions_value = sum([thread_states[sym]["entry_cost"] for sym in PORTFOLIO_SYMBOLS if thread_states[sym]["is_holding"]]) 
+        active_positions_value = sum([thread_states[sym]["entry_cost"] for sym in PORTFOLIO_SYMBOLS if thread_states[sym]["is_holding"]])
         net_portfolio_equity = sim_cash + active_positions_value 
         
         logging.info(f"📊 Matrix Wallet Cash: ${sim_cash:,.2f} | Net Pool Equity: ${net_portfolio_equity:,.2f} | Total Session Fees: ${total_fees_paid:,.2f}") 
         time.sleep(POLLING_INTERVAL_SECONDS) 
 
+# --- SAFE ACTIVE WORKER IGNITION FUNCTION ---
+def ignite_engine_matrix_loop():
+    if not any(t.name == "VelocityMatrixThread" for t in threading.enumerate()): 
+        logging.info("🚀 Web Intercept Confirmed. Activating Independent Scanner Thread Matrix...") 
+        t = threading.Thread(target=trading_loop, name="VelocityMatrixThread", daemon=True) 
+        t.start() 
 
-# 🌟 PRODUCTION BACKGROUND AUTOMATIC DISPATCH ENGINE 
-# Fires detached automatically immediately upon process generation mapping 
+# 🌐 LIGHTWEIGHT WEB SERVER ROUTING INTERFACE (DEFINED LAST)
+try: 
+    from flask import Flask 
+    app = Flask(__name__) 
+    
+    @app.route('/') 
+    def health_check(): 
+        # Safely capture incoming server requests to spawn the scanner thread within the active web worker context
