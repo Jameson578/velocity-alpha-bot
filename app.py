@@ -202,6 +202,8 @@ def ignite_engine_matrix_loop():
         logging.info("🚀 Web Intercept Confirmed. Activating Independent Scanner Thread Matrix...") 
         t = threading.Thread(target=trading_loop, name="VelocityMatrixThread", daemon=True) 
         t.start() 
+    else:
+        pass
 
 # 🌐 LIGHTWEIGHT WEB SERVER ROUTING INTERFACE (DEFINED LAST)
 try: 
