@@ -7,14 +7,14 @@ import pandas as pd
 import numpy as np 
 from datetime import datetime, UTC 
 
-# Configure standard root logging to force output straight onto your dashboard log view
+# Configure standard root logging to force output straight onto your tracking console screen
 logging.basicConfig( 
     level=logging.INFO, 
     format='%(asctime)s [%(levelname)s] %(message)s', 
     handlers=[logging.StreamHandler(sys.stdout)] 
 ) 
 
-# 🌐 LIGHTWEIGHT WEB SERVER WITH INTEGRATED MULTI-THREAD ENGINE HOOKS
+# 🌐 LIGHTWEIGHT WEB SERVER DEFINED NATIVELY AT THE TOP FOR PORT MAPPING PASSES
 try: 
     from flask import Flask 
     app = Flask(__name__) 
@@ -208,5 +208,5 @@ def trading_loop():
         time.sleep(POLLING_INTERVAL_SECONDS) 
 
 
-# 🌟 PRODUCTION BACKGROUND AUTOMATIC DISPATCH ENGINE
-# Fires detached automatically immediately upon process generation mapping
+# 🌟 EXPLICIT SINGLE-FILE RUNTIME DISPATCH HOOK
+if not any(t.name == "VelocityMatrixThread" for t in threading.enumerate()): 
