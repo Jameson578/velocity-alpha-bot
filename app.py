@@ -7,21 +7,21 @@ import pandas as pd
 import numpy as np 
 from datetime import datetime, UTC 
 
-# Configure standard root logging straight to the standard output stream
+# Configure standard root logging to force output straight through onto your screen
 logging.basicConfig( 
     level=logging.INFO, 
     format='%(asctime)s [%(levelname)s] %(message)s', 
     handlers=[logging.StreamHandler(sys.stdout)] 
 ) 
 
-# 🌐 LIGHTWEIGHT WEB SERVER DEFINED AT THE TOP FOR NATIVE REGISTRATION
+# 🌐 LIGHTWEIGHT WEB SERVER DEFINED NATIVELY AT THE TOP
 try: 
     from flask import Flask 
     app = Flask(__name__) 
     
     @app.route('/') 
     def health_check(): 
-        return "Velocity Alpha Standalone Engine: ONLINE", 200 
+        return "Velocity Alpha Engine: ONLINE", 200 
 except ImportError: 
     logging.error("❌ Critical Error: 'Flask' library not detected.") 
     sys.exit(1) 
@@ -34,7 +34,7 @@ ACCOUNT_TYPE = "paper"
 try: 
     from alpaca.data.historical import CryptoHistoricalDataClient 
     from alpaca.data.requests import CryptoBarsRequest 
-    from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
+    from alpaca.data.timeframe import TimeFrame, TimeFrameUnit 
 except ImportError: 
     logging.error("❌ Critical Error: 'alpaca-py' library not detected.") 
     sys.exit(1) 
@@ -111,11 +111,11 @@ def calculate_trend_signals(df_input):
 def trading_loop(): 
     global sim_cash, trade_counter, total_fees_paid 
     
-    # Wait briefly for parent container worker context to map out log links
-    time.sleep(3) 
+    # Let container workers finish context orchestration mapping sequence parameters
+    time.sleep(5) 
     
-    logging.info(f"⚡ Velocity Engine Live AUTHENTICATED-ALPACA Standalone Gateway Engaged...") 
-    logging.info(f"💰 Starting Capital: ${sim_cash:,.2f} USD | Dynamic Multi-Asset Focus: {PORTFOLIO_SYMBOLS}") 
+    logging.info(f"⚡ Velocity Engine Live AUTHENTICATED-ALPACA Gateway Engaged...") 
+    logging.info(f"💰 Starting Capital: ${sim_cash:,.2f} USD | Focus Assets: {PORTFOLIO_SYMBOLS}") 
     
     while True: 
         live_timestamp_str = datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC') 
@@ -206,6 +206,7 @@ def trading_loop():
         time.sleep(POLLING_INTERVAL_SECONDS) 
 
 
-# 🌟 NATIVE BOOT INITIALIZATION MATRIX (BYPASSES WEB INTERCEPT RESTRAINTS)
-# Spawns the worker scanning loop thread natively upon application execution frame mounting.
+# 🌟 EXPLICIT SINGLE-FILE RUNTIME DISPATCH HOOK
+# Spawns automatically upon the module loading context frame initialization
 if not any(t.name == "VelocityMatrixThread" for t in threading.enumerate()): 
+    logging.info("🚀 Spawning Velocity Quantitative Thread Process detached...") 
