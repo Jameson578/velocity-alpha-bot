@@ -39,7 +39,7 @@ except ImportError:
     logging.error("❌ Critical Error: 'alpaca-py' library not detected.") 
     sys.exit(1) 
 
-# 1. CORE OPERATIONAL CONTROL CENTER
+# 1. CORE OPERATIONAL CONTROL CENTER (MULTI-ASSET PARAMETERS MATCHING SCRIPT 2)
 PORTFOLIO_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD"] 
 INITIAL_CASH = 500.00 
 MARGIN_LEVERAGE = 1.5 
@@ -48,7 +48,7 @@ ATR_STOP_MULT = 2.5
 FEE_RATE = 0.0010 
 POLLING_INTERVAL_SECONDS = 15 
 
-# 2. LOCAL SIMULATED PORTFOLIO MANAGEMENT STATE
+# 2. LOCAL SIMULATED PORTFOLIO MANAGEMENT STATE (SHARED MATRIX POOL)
 sim_cash = INITIAL_CASH 
 trade_counter = 0 
 total_fees_paid = 0.0 
@@ -69,7 +69,7 @@ def fetch_live_market_candles(symbol):
     start_time = end_time - pd.Timedelta(hours=100) 
     
     try: 
-        # 🛠️ FIXED: Added strict keyword definitions for TimeFrame to bypass validation crashes
+        # Keyword-mapped TimeFrame parameter configuration to eliminate SDK crashes
         request_params = CryptoBarsRequest( 
             symbol_or_symbols=symbol, 
             timeframe=TimeFrame(amount=15, unit=TimeFrameUnit.Minute), 
@@ -84,7 +84,7 @@ def fetch_live_market_candles(symbol):
         df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume'}, inplace=True) 
         return df[['Open', 'High', 'Low', 'Close', 'Volume']] 
     except Exception as e: 
-        logging.error(f"❌ Internal API Data Fetch Error on {symbol}: {e}")
+        logging.error(f"❌ Internal API Data Fetch Failure on {symbol}: {e}")
         return None 
 
 def calculate_trend_signals(df_input): 
@@ -112,7 +112,7 @@ def calculate_trend_signals(df_input):
 def trading_loop(): 
     global sim_cash, trade_counter, total_fees_paid 
     
-    # Allow the Gunicorn runtime worker initialization to settle completely first
+    # Let process worker containers complete binding sequences
     time.sleep(5) 
     
     logging.info(f"⚡ Velocity Engine Live AUTHENTICATED-ALPACA Gateway Engaged...") 
@@ -200,7 +200,7 @@ def trading_loop():
                     logging.info("🚀 [VIRTUAL MARKET ENTRY ORDER EXECUTED]") 
                     logging.info(f" Allocation: Buying {s['position_qty']:.4f} units of {symbol} at ${s['buy_price']:,.2f} using {MARGIN_LEVERAGE}x Leverage") 
                     
-        # Calculate pool equity across shared context state
+        # Shared metrics compilation output
         active_positions_value = sum([thread_states[sym]["entry_cost"] for sym in PORTFOLIO_SYMBOLS if thread_states[sym]["is_holding"]])
         net_portfolio_equity = sim_cash + active_positions_value 
         
@@ -208,5 +208,5 @@ def trading_loop():
         time.sleep(POLLING_INTERVAL_SECONDS) 
 
 
-# 🌟 GUNICORN PROCESS MODULE AUTO-IGNITION LINK
-if not any(t.name == "VelocityMatrixThread" for t in threading.enumerate()): 
+# 🌟 PRODUCTION BACKGROUND RUNTIME DISPATCHER
+# Spawns automatically on process fork without cross-file dependencies
