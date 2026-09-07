@@ -7,26 +7,12 @@ import pandas as pd
 import numpy as np 
 from datetime import datetime, UTC 
 
-# Configure standard root logging to force output straight through Gunicorn onto your screen
+# Configure standard root logging for crisp terminal tracking
 logging.basicConfig( 
     level=logging.INFO, 
     format='%(asctime)s [%(levelname)s] %(message)s', 
     handlers=[logging.StreamHandler(sys.stdout)] 
 ) 
-
-# 🌐 LIGHTWEIGHT WEB SERVER WITH CORE AUTO-IGNITION LINK
-try: 
-    from flask import Flask 
-    app = Flask(__name__) 
-    
-    @app.route('/') 
-    def health_check(): 
-        # Safely intercept Render's startup web ping to trigger the persistent engine loop
-        ignite_engine_matrix_loop()
-        return "Velocity Alpha Engine: ONLINE", 200 
-except ImportError: 
-    logging.error("❌ Critical Error: 'Flask' library not detected.") 
-    sys.exit(1) 
 
 # 🔐 DIRECT PRODUCTION PARAMETERS MAP
 ALPACA_API_KEY = "PKGV2SNFX6ABDXTQQ25ZFQHGLN"
@@ -109,12 +95,11 @@ def calculate_trend_signals(df_input):
     df['Limit_Buy_Target'] = df['VWAP'] + (0.3 * df['ATR']) 
     return df.ffill().bfill() 
 
-# 4. CORE ENGINE LIVE EXECUTION STATE MACHINE
-def trading_loop(): 
+# 4. CORE ENGINE STANDALONE RUNTIME LOOP
+def execute_algorithmic_scanner(): 
     global sim_cash, trade_counter, total_fees_paid 
     
-    time.sleep(3) 
-    logging.info(f"⚡ Velocity Engine Live AUTHENTICATED-ALPACA Gateway Engaged...") 
+    logging.info(f"⚡ Velocity Engine Live AUTHENTICATED-ALPACA Standalone Gateway Engaged...") 
     logging.info(f"💰 Starting Capital: ${sim_cash:,.2f} USD | Dynamic Multi-Asset Focus: {PORTFOLIO_SYMBOLS}") 
     
     while True: 
@@ -205,9 +190,6 @@ def trading_loop():
         logging.info(f"📊 Matrix Wallet Cash: ${sim_cash:,.2f} | Net Pool Equity: ${net_portfolio_equity:,.2f} | Total Session Fees: ${total_fees_paid:,.2f}") 
         time.sleep(POLLING_INTERVAL_SECONDS) 
 
-# --- SAFE WORKER INTERCEPT HOOK LAYER ---
-def ignite_engine_matrix_loop():
-    """
-    Safely triggers the detached trading loop background thread directly within the 
-    active context worker node running HTTP operations.
-    """
+if __name__ == '__main__': 
+    # Force instant process initialization loop execution
+    execute_algorithmic_scanner()
