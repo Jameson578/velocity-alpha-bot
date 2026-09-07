@@ -22,7 +22,8 @@ try:
     @app.route('/') 
     def health_check(): 
         # Safely intercept Render's startup web ping to trigger the persistent engine loop
-        ignite_trading_matrix_on_worker()
+        # Fixed sequential definition linkage to eliminate NameError crashes
+        ignite_engine_matrix_loop()
         return "Velocity Alpha Engine: ONLINE", 200 
 except ImportError: 
     logging.error("❌ Critical Error: 'Flask' library not detected.") 
@@ -207,6 +208,3 @@ def trading_loop():
         net_portfolio_equity = sim_cash + active_positions_value 
         
         logging.info(f"📊 Matrix Wallet Cash: ${sim_cash:,.2f} | Net Pool Equity: ${net_portfolio_equity:,.2f} | Total Session Fees: ${total_fees_paid:,.2f}") 
-        time.sleep(POLLING_INTERVAL_SECONDS) 
-
-# --- SAFE WORKER INTERCEPT HOOK LAYER ---
