@@ -27,7 +27,6 @@ except ImportError:
     sys.exit(1) 
 
 # 🔐 DIRECT PRODUCTION PARAMETERS MAP
-# Hardcoded within the active process frame to ensure instant multi-process access
 ALPACA_API_KEY = "PKGV2SNFX6ABDXTQQ25ZFQHGLN"
 ALPACA_SECRET_KEY = "Bo2QTdwmDcXvZ8v3Vkttf8H1GwKFKxmXzTJ4B3nJDLrT"
 ACCOUNT_TYPE = "paper" 
@@ -68,13 +67,15 @@ data_client = CryptoHistoricalDataClient(api_key=ALPACA_API_KEY, secret_key=ALPA
 def fetch_live_market_candles(symbol): 
     end_time = datetime.now(UTC) 
     start_time = end_time - pd.Timedelta(hours=100) 
-    request_params = CryptoBarsRequest( 
-        symbol_or_symbols=symbol, 
-        timeframe=TimeFrame(15, TimeFrameUnit.Minute), 
-        start=start_time, 
-        end=end_time 
-    ) 
+    
     try: 
+        # 🛠️ FIXED: Added strict keyword definitions for TimeFrame to bypass validation crashes
+        request_params = CryptoBarsRequest( 
+            symbol_or_symbols=symbol, 
+            timeframe=TimeFrame(amount=15, unit=TimeFrameUnit.Minute), 
+            start=start_time, 
+            end=end_time 
+        ) 
         bars = data_client.get_crypto_bars(request_params) 
         df_raw = bars.df 
         if df_raw is None or df_raw.empty: 
@@ -82,7 +83,8 @@ def fetch_live_market_candles(symbol):
         df = df_raw.reset_index(level=0, drop=True) 
         df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume'}, inplace=True) 
         return df[['Open', 'High', 'Low', 'Close', 'Volume']] 
-    except Exception: 
+    except Exception as e: 
+        logging.error(f"❌ Internal API Data Fetch Error on {symbol}: {e}")
         return None 
 
 def calculate_trend_signals(df_input): 
@@ -111,7 +113,7 @@ def trading_loop():
     global sim_cash, trade_counter, total_fees_paid 
     
     # Allow the Gunicorn runtime worker initialization to settle completely first
-    time.sleep(5)
+    time.sleep(5) 
     
     logging.info(f"⚡ Velocity Engine Live AUTHENTICATED-ALPACA Gateway Engaged...") 
     logging.info(f"💰 Starting Capital: ${sim_cash:,.2f} USD | Dynamic Multi-Asset Focus: {PORTFOLIO_SYMBOLS}") 
@@ -206,7 +208,5 @@ def trading_loop():
         time.sleep(POLLING_INTERVAL_SECONDS) 
 
 
-# 🌟 PRODUCTION BACKGROUND DEPLOYMENT IGNITION
-# Spawns the worker thread automatically the instant Gunicorn imports the app workspace
+# 🌟 GUNICORN PROCESS MODULE AUTO-IGNITION LINK
 if not any(t.name == "VelocityMatrixThread" for t in threading.enumerate()): 
-    logging.info("🚀 System Instance Loaded. Launching Quantitative Engine Thread Detached...") 
