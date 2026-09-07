@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np 
 from datetime import datetime, UTC 
 
-# Configure standard root logging to force output straight onto your Render log stream
+# Configure standard root logging straight to the standard output stream
 logging.basicConfig( 
     level=logging.INFO, 
     format='%(asctime)s [%(levelname)s] %(message)s', 
@@ -26,7 +26,7 @@ except ImportError:
     logging.error("❌ Critical Error: 'Flask' library not detected.") 
     sys.exit(1) 
 
-# Global credentials placeholders updated inside the boot hook
+# Global credentials fields updated on engine boot execution
 ALPACA_API_KEY = None 
 ALPACA_SECRET_KEY = None 
 ACCOUNT_TYPE = "paper" 
@@ -39,7 +39,7 @@ except ImportError:
     logging.error("❌ Critical Error: 'alpaca-py' library not detected.") 
     sys.exit(1) 
 
-# 1. CORE OPERATIONAL CONTROL CENTER (MULTI-ASSET MATRIX - OPTIMIZED PARAMS)
+# 1. CORE OPERATIONAL CONTROL CENTER 
 PORTFOLIO_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD"] 
 INITIAL_CASH = 500.00 
 MARGIN_LEVERAGE = 1.5 
@@ -48,12 +48,11 @@ ATR_STOP_MULT = 2.5
 FEE_RATE = 0.0010 
 POLLING_INTERVAL_SECONDS = 15 
 
-# 2. LOCAL SIMULATED PORTFOLIO MANAGEMENT STATE (SHARED MATRIX POOL)
+# 2. LOCAL SIMULATED PORTFOLIO STATE MANAGEMENT
 sim_cash = INITIAL_CASH 
 trade_counter = 0 
 total_fees_paid = 0.0 
 
-# Tracking dictionaries matching script 2 structure
 thread_states = {symbol: { 
     "is_holding": False, 
     "position_qty": 0.0, 
@@ -62,14 +61,11 @@ thread_states = {symbol: {
     "highest_high_in_trade": 0.0 
 } for symbol in PORTFOLIO_SYMBOLS} 
 
-# Initialize client placeholder
 data_client = None 
 
 # 3. LIVE MARKET DATA FETCH ENGINE
 def fetch_live_market_candles(symbol): 
-    """Pulls genuine live 15-minute OHLCV bars for a specific pair via the authenticated Alpaca SDK.""" 
     if not data_client:
-        logging.error(f"❌ [DATA ERROR] Client connection missing while attempting fetch for {symbol}")
         return None
         
     end_time = datetime.now(UTC) 
@@ -85,14 +81,11 @@ def fetch_live_market_candles(symbol):
         bars = data_client.get_crypto_bars(request_params) 
         df_raw = bars.df 
         if df_raw is None or df_raw.empty: 
-            raise ValueError(f"Alpaca node returned an empty snapshot matrix for {symbol}.") 
+            return None 
         df = df_raw.reset_index(level=0, drop=True) 
-        df.rename(columns={ 
-            'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume' 
-        }, inplace=True) 
+        df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume'}, inplace=True) 
         return df[['Open', 'High', 'Low', 'Close', 'Volume']] 
-    except Exception as e: 
-        logging.warning(f"⚠️ Data Feed Interruption on {symbol}: {e}. Retrying matrix loop...") 
+    except Exception: 
         return None 
 
 def calculate_trend_signals(df_input): 
@@ -121,18 +114,17 @@ def trading_loop():
     global sim_cash, trade_counter, total_fees_paid 
     
     logging.info(f"⚡ Velocity Engine Live AUTHENTICATED-ALPACA Gateway Engaged...") 
-    logging.info(f"💰 Starting Capital: ${sim_cash:,.2f} USD | Dynamic Multi-Asset Focus: {PORTFOLIO_SYMBOLS}") 
+    logging.info(f"💰 Starting Capital: ${sim_cash:,.2f} USD | Focus Assets: {PORTFOLIO_SYMBOLS}") 
     
     while True: 
         if not ALPACA_API_KEY or "YOUR_" in str(ALPACA_API_KEY): 
-            logging.error("🛑 HALT DETECTED: ALPACA_API_KEY is structurally invalid or unpopulated!") 
+            logging.error("🛑 HALT DETECTED: ALPACA_API_KEY parameters are structurally unpopulated!") 
             time.sleep(10) 
             continue 
         
         live_timestamp_str = datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC') 
         logging.info(f"⏱️ Scan Event Matrix Initiated: {live_timestamp_str}") 
         
-        # Loop sequentially over all portfolio tickers matching script 2 loop structure
         for symbol in PORTFOLIO_SYMBOLS: 
             s = thread_states[symbol] 
             market_data = fetch_live_market_candles(symbol) 
@@ -149,7 +141,6 @@ def trading_loop():
             current_norm_vol = df_vectors['Asset_Norm_Vol'].iloc[-1] 
             limit_buy_target = df_vectors['Limit_Buy_Target'].iloc[-2] 
             
-            # Recalculate specific asset PnL for active positions
             open_pnl = (s["position_qty"] * (current_close - s["buy_price"])) if s["is_holding"] else 0.0 
             logging.info(f" > [{symbol}] Market: ${current_close:,.2f} | Entry Goal: ${limit_buy_target:,.2f} | Asset PnL: ${open_pnl:+,.2f}") 
             
@@ -212,5 +203,21 @@ def trading_loop():
                     logging.info("🚀 [VIRTUAL MARKET ENTRY ORDER EXECUTED]") 
                     logging.info(f" Allocation: Buying {s['position_qty']:.4f} units of {symbol} at ${s['buy_price']:,.2f} using {MARGIN_LEVERAGE}x Leverage") 
                     
-        # Calculate pool equity across shared context state
-        active_positions_value = 0.0 
+        active_positions_value = sum([thread_states[sym]["entry_cost"] for sym in PORTFOLIO_SYMBOLS if thread_states[sym]["is_holding"]]) 
+        net_portfolio_equity = sim_cash + active_positions_value 
+        
+        logging.info(f"📊 Matrix Wallet Cash: ${sim_cash:,.2f} | Net Pool Equity: ${net_portfolio_equity:,.2f} | Total Session Fees: ${total_fees_paid:,.2f}") 
+        time.sleep(POLLING_INTERVAL_SECONDS) 
+
+
+# 🌟 EXPLICIT EXPORT DECLARATION HOOK FOR GUNICORN RUNTIME
+def ignite_engine_matrix_loop():
+    """
+    Explicit initialization routine mapped to the custom Gunicorn lifecycle framework hook.
+    """
+    global data_client, ALPACA_API_KEY, ALPACA_SECRET_KEY
+    
+    # 🔐 DIRECT PRODUCTION PARAMETERS MAP
+    ALPACA_API_KEY = "PKGV2SNFX6ABDXTQQ25ZFQHGLN"
+    ALPACA_SECRET_KEY = "Bo2QTdwmDcXvZ8v3Vkttf8H1GwKFKxmXzTJ4B3nJDLrT"
+    
