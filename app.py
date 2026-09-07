@@ -64,10 +64,10 @@ trading_client = TradingClient(api_key=ALPACA_API_KEY, secret_key=ALPACA_SECRET_
 def fetch_live_market_candles(symbol):
     end_time = datetime.now(UTC)
     start_time = end_time - pd.Timedelta(hours=100)
-    clean_target_ticker = symbol.replace("/", "")
+    # 📝 FIX: Preserving the slash so Alpaca accepts the symbol formatting
     try:
         request_params = CryptoBarsRequest(
-            symbol_or_symbols=clean_target_ticker,
+            symbol_or_symbols=symbol,
             timeframe=TimeFrame(amount=15, unit=TimeFrameUnit.Minute),
             start=start_time,
             end=end_time
@@ -80,7 +80,7 @@ def fetch_live_market_candles(symbol):
         df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume'}, inplace=True)
         return df[['Open', 'High', 'Low', 'Close', 'Volume']]
     except Exception as e:
-        logging.error(f"❌ Internal API Data Fetch Failure on {symbol} (Target: {clean_target_ticker}): {e}")
+        logging.error(f"❌ Internal API Data Fetch Failure on {symbol}: {e}")
         return None
 
 def calculate_trend_signals(df_input):
@@ -124,8 +124,8 @@ def trading_loop():
             
             for symbol in PORTFOLIO_SYMBOLS:
                 s = thread_states[symbol]
-                clean_ticker = symbol.replace("/", "")
-                is_holding = clean_ticker in holding_symbols
+                # 📝 FIX: Alpaca positions retain the slash for crypto assets, no string replace needed
+                is_holding = symbol in holding_symbols
                 
                 market_data = fetch_live_market_candles(symbol)
                 df_vectors = calculate_trend_signals(market_data)
@@ -145,7 +145,7 @@ def trading_loop():
                 
                 # --- STRUCTURED LIVE BROKER EXIT GATEWAYS ---
                 if is_holding:
-                    position_details = next(p for p in active_positions if p.symbol == clean_ticker)
+                    position_details = next(p for p in active_positions if p.symbol == symbol)
                     position_qty = abs(float(position_details.qty))
                     
                     if current_high > s["highest_high_in_trade"] or s["buy_price"] == 0:
@@ -169,7 +169,7 @@ def trading_loop():
                     # 🚀 TESTING OVERRIDE GATEWAY: Forces profit liquidation check to clear asset slots instantly
                     if current_high >= target_profit_price or current_low <= target_stop_price or True:
                         order_data = MarketOrderRequest(
-                            symbol=clean_ticker,
+                            symbol=symbol,
                             qty=position_qty,
                             side=OrderSide.SELL,
                             time_in_force=TimeInForce.GTC
@@ -190,7 +190,7 @@ def trading_loop():
                             continue
                             
                         order_data = MarketOrderRequest(
-                            symbol=clean_ticker,
+                            symbol=symbol,
                             notional=round(calculated_entry, 2),
                             side=OrderSide.BUY,
                             time_in_force=TimeInForce.GTC
