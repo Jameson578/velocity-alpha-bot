@@ -14,6 +14,20 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)] 
 ) 
 
+# 🌐 LIGHTWEIGHT WEB SERVER WITH CORE AUTO-IGNITION LINK
+try: 
+    from flask import Flask 
+    app = Flask(__name__) 
+    
+    @app.route('/') 
+    def health_check(): 
+        # Safely intercept Render's startup web ping to trigger the persistent engine loop
+        ignite_engine_matrix_loop()
+        return "Velocity Alpha Engine: ONLINE", 200 
+except ImportError: 
+    logging.error("❌ Critical Error: 'Flask' library not detected.") 
+    sys.exit(1) 
+
 # 🔐 DIRECT PRODUCTION PARAMETERS MAP
 ALPACA_API_KEY = "PKGV2SNFX6ABDXTQQ25ZFQHGLN"
 ALPACA_SECRET_KEY = "Bo2QTdwmDcXvZ8v3Vkttf8H1GwKFKxmXzTJ4B3nJDLrT"
@@ -197,15 +211,3 @@ def ignite_engine_matrix_loop():
     Safely triggers the detached trading loop background thread directly within the 
     active context worker node running HTTP operations.
     """
-    if not any(t.name == "VelocityMatrixThread" for t in threading.enumerate()): 
-        logging.info("🚀 Web Ping Hook Intercepted. Ignition Sequence Authorized for Scanner Thread...") 
-        t = threading.Thread(target=trading_loop, name="VelocityMatrixThread", daemon=True) 
-        t.start() 
-
-# 🌐 LIGHTWEIGHT WEB SERVER DEFINED AT THE BOTTOM TO ENSURE NATIVE IMPORT REGISTRATION
-try: 
-    from flask import Flask 
-    app = Flask(__name__) 
-    
-    @app.route('/') 
-    def health_check(): 
