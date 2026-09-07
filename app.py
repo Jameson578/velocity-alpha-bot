@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np 
 from datetime import datetime, UTC 
 
-# Configure standard root logging to force output straight through onto your screen
+# Configure standard root logging to force output straight through Gunicorn onto your screen
 logging.basicConfig( 
     level=logging.INFO, 
     format='%(asctime)s [%(levelname)s] %(message)s', 
@@ -68,9 +68,12 @@ def fetch_live_market_candles(symbol):
     end_time = datetime.now(UTC) 
     start_time = end_time - pd.Timedelta(hours=100) 
     
+    # 🛠️ FIXED: Strips slashes out dynamically to feed the API flat entities (e.g. "BTCUSD")
+    clean_target_ticker = symbol.replace("/", "")
+    
     try: 
         request_params = CryptoBarsRequest( 
-            symbol_or_symbols=symbol, 
+            symbol_or_symbols=clean_target_ticker, 
             timeframe=TimeFrame(amount=15, unit=TimeFrameUnit.Minute), 
             start=start_time, 
             end=end_time 
@@ -83,7 +86,7 @@ def fetch_live_market_candles(symbol):
         df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume'}, inplace=True) 
         return df[['Open', 'High', 'Low', 'Close', 'Volume']] 
     except Exception as e: 
-        logging.error(f"❌ Internal API Data Fetch Failure on {symbol}: {e}")
+        logging.error(f"❌ Internal API Data Fetch Failure on {symbol} (Target: {clean_target_ticker}): {e}")
         return None 
 
 def calculate_trend_signals(df_input): 
@@ -206,7 +209,5 @@ def trading_loop():
         time.sleep(POLLING_INTERVAL_SECONDS) 
 
 
-# 🌟 EXPLICIT SINGLE-FILE RUNTIME DISPATCH HOOK
-# Spawns automatically upon the module loading context frame initialization
+# 🌟 NATIVE BOOT INITIALIZATION DISPATCHER
 if not any(t.name == "VelocityMatrixThread" for t in threading.enumerate()): 
-    logging.info("🚀 Spawning Velocity Quantitative Thread Process detached...") 
