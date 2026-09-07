@@ -202,7 +202,7 @@ def ignite_engine_matrix_loop():
         t = threading.Thread(target=trading_loop, name="VelocityMatrixThread", daemon=True) 
         t.start() 
 
-# 🌐 LIGHTWEIGHT WEB SERVER DEFINED AT THE BOTTOM TO ENSURE SEQUENTIAL DEFINITION
+# 🌐 LIGHTWEIGHT WEB SERVER DEFINED AT THE BOTTOM TO ENSURE NATIVE IMPORT REGISTRATION
 try: 
     from flask import Flask 
     app = Flask(__name__) 
