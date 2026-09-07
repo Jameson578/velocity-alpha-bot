@@ -194,6 +194,10 @@ def trading_loop():
 
 # --- SAFE ACTIVE WORKER IGNITION FUNCTION ---
 def ignite_engine_matrix_loop():
+    """
+    Safely triggers the detached trading loop background thread directly within the 
+    active context worker node running HTTP operations. Called by the '/' health check route.
+    """
     if not any(t.name == "VelocityMatrixThread" for t in threading.enumerate()): 
         logging.info("🚀 Web Intercept Confirmed. Activating Independent Scanner Thread Matrix...") 
         t = threading.Thread(target=trading_loop, name="VelocityMatrixThread", daemon=True) 
@@ -201,9 +205,3 @@ def ignite_engine_matrix_loop():
 
 # 🌐 LIGHTWEIGHT WEB SERVER ROUTING INTERFACE (DEFINED LAST)
 try: 
-    from flask import Flask 
-    app = Flask(__name__) 
-    
-    @app.route('/') 
-    def health_check(): 
-        # Safely capture incoming server requests to spawn the scanner thread within the active web worker context
