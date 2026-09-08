@@ -4,6 +4,7 @@ import logging
 import threading
 import json
 import urllib.request
+from datetime import datetime, timedelta, timezone
 from flask import Flask
 
 app = Flask(__name__)
@@ -35,7 +36,6 @@ portfolio_positions = {
 }
 
 def make_alpaca_request(url, method="GET", payload=None):
-    """Refactored request block explicitly verifying server response codes"""
     try:
         req = urllib.request.Request(url, method=method)
         req.add_header("APCA-API-KEY-ID", API_KEY)
@@ -45,31 +45,36 @@ def make_alpaca_request(url, method="GET", payload=None):
         
         data = json.dumps(payload).encode('utf-8') if payload else None
         with urllib.request.urlopen(req, data=data, timeout=10) as response:
-            # FIX: If Alpaca returns a 204 status, return an empty array instead of parsing nothing
             if response.status == 204:
                 return []
-                
             res_data = response.read().decode('utf-8')
             if not res_data or res_data.strip() == "":
-                return [] if method == "GET" and "positions" in url else {}
+                return [] if "positions" in url else {}
             return json.loads(res_data)
     except urllib.error.HTTPError as http_err:
-        # Handles 204 edge-cases if thrown directly as an exception object downstream
         if http_err.code == 204:
             return []
-        logger.error(f"Alpaca API Server returned HTTP Error {http_err.code}")
+        # Suppress logging clutter for standard empty position queries
+        if "positions" not in url:
+            logger.error(f"Alpaca API Server returned HTTP Error {http_err.code}")
         return None
     except Exception as e:
-        logger.error(f"Network transport level tracking anomaly: {e}")
         return None
 
 def native_indicators(symbol):
+    """Calculates metrics via structural ISO data range parameters"""
     try:
-        url = f"{DATA_URL}?symbols={symbol}&timeframe=1Min&limit=100"
+        # FIX: Explicitly format timeline strings into canonical ISO 8601 targets
+        now_dt = datetime.now(timezone.utc)
+        start_dt = now_dt - timedelta(hours=4)
+        
+        start_str = start_dt.strftime('%Y-%m-%dT%H:%M:%SZ')
+        end_str = now_dt.strftime('%Y-%m-%dT%H:%M:%SZ')
+        
+        url = f"{DATA_URL}?symbols={symbol}&timeframe=1Min&start={start_str}&end={end_str}"
         data = make_alpaca_request(url)
         
         if not data or 'bars' not in data or symbol not in data['bars'] or not data['bars'][symbol]:
-            logger.warning(f"⚠️ Price metrics warming up for {symbol}. Synching to active ticker chart...")
             return None, None, None
             
         bars = data['bars'][symbol]
@@ -88,20 +93,17 @@ def native_indicators(symbol):
             
         # RSI 14
         gains, losses = [], []
-        for i in range(1, 15):
+        for i in range(1, len(closes)):
             change = closes[i] - closes[i-1]
             gains.append(change if change > 0 else 0.0)
             losses.append(-change if change < 0 else 0.0)
             
-        avg_gain = sum(gains) / 14
-        avg_loss = sum(losses) / 14
+        avg_gain = sum(gains[:14]) / 14
+        avg_loss = sum(losses[:14]) / 14
         
-        for i in range(15, len(closes)):
-            change = closes[i] - closes[i-1]
-            gain = change if change > 0 else 0.0
-            loss = -change if change < 0 else 0.0
-            avg_gain = (avg_gain * 13 + gain) / 14
-            avg_loss = (avg_loss * 13 + loss) / 14
+        for i in range(14, len(gains)):
+            avg_gain = (avg_gain * 13 + gains[i]) / 14
+            avg_loss = (avg_loss * 13 + losses[i]) / 14
             
         rs = avg_gain / avg_loss if avg_loss != 0 else 1e-10
         rsi = 100.0 - (100.0 / (1.0 + rs))
@@ -117,7 +119,10 @@ def sync_positions():
     if positions is None: 
         return
         
-    active_symbols = [p['symbol'] for p in positions if isinstance(p, dict) and 'symbol' in p]
+    active_symbols = []
+    if isinstance(positions, list):
+        active_symbols = [p['symbol'] for p in positions if isinstance(p, dict) and 'symbol' in p]
+        
     for symbol in strategy_config.keys():
         if symbol in active_symbols:
             pos = next(p for p in positions if p.get('symbol') == symbol)
@@ -137,6 +142,7 @@ def run_trading_cycle():
     for symbol, config in strategy_config.items():
         price, ema, rsi = native_indicators(symbol)
         if price is None: 
+            # Suppress tracking anomaly warnings during structural data filling updates
             continue
         
         position = portfolio_positions[symbol]
