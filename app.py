@@ -1,213 +1,93 @@
 import os
-import sys
 import time
-import threading
 import logging
-import pandas as pd
-import numpy as np
-from datetime import datetime, UTC
+from alpaca.trading.client import TradingClient
+from alpaca.trading.requests import MarketOrderRequest
+from alpaca.trading.enums import OrderSide, TimeInForce
 
-# Configure standard root logging straight to the standard output stream
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    handlers=[logging.StreamHandler(sys.stdout)]
-)
+# 1. Setup Structured Application Logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
+logger = logging.getLogger("VelocityEngine")
 
-# 🌐 LIGHTWEIGHT WEB SERVER DEFINED NATIVELY AT THE TOP FOR PORT MAPPING PASSES
-try:
-    from flask import Flask
-    app = Flask(__name__)
-    @app.route('/')
-    def health_check():
-        return "Velocity Alpha Monolith Engine: ONLINE", 200
-except ImportError:
-    logging.error("❌ Critical Error: 'Flask' library not detected.")
-    sys.exit(1)
+# 2. Alpaca Gateway Authentication
+# Safely assign your environment credentials inside your Render control dashboard
+API_KEY = os.environ.get("ALPACA_API_KEY", "YOUR_API_KEY_HERE")
+SECRET_KEY = os.environ.get("ALPACA_SECRET_KEY", "YOUR_SECRET_KEY_HERE")
+PAPER = True  
 
-# 🔐 DIRECT PRODUCTION PARAMETERS MAP
-ALPACA_API_KEY = "PKGV2SNFX6ABDXTQQ25ZFQHGLN"
-ALPACA_SECRET_KEY = "Bo2QTdwmDcXvZ8v3Vkttf8H1GwKFKxmXzTJ4B3nJDLrT"
-ACCOUNT_TYPE = "paper"
+trading_client = TradingClient(api_key=API_KEY, secret_key=SECRET_KEY, paper=PAPER)
 
-try:
-    from alpaca.data.historical import CryptoHistoricalDataClient
-    from alpaca.data.requests import CryptoBarsRequest
-    from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
-    from alpaca.trading.client import TradingClient
-    from alpaca.trading.requests import MarketOrderRequest
-    from alpaca.trading.enums import OrderSide, TimeInForce
-except ImportError:
-    logging.error("❌ Critical Error: 'alpaca-py' library dependencies not detected.")
-    sys.exit(1)
+# 3. Strategy Parameters Configuration
+strategy_config = {
+    "BTC/USD": {"entry_goal": 78543.73, "stop_loss_pct": 0.01, "allocation": 24000.0},
+    "ETH/USD": {"entry_goal": 2487.56, "stop_loss_pct": 0.01, "allocation": 24000.0},
+    "SOL/USD": {"entry_goal": 103.26, "stop_loss_pct": 0.01, "allocation": 24000.0}
+}
 
-# 1. CORE OPERATIONAL CONTROL CENTER
-PORTFOLIO_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD"]
-INITIAL_CASH = 500.00
-MARGIN_LEVERAGE = 1.5
-ATR_PROFIT_MULT = 2.5
-ATR_STOP_MULT = 2.5
-FEE_RATE = 0.0010
-POLLING_INTERVAL_SECONDS = 15
+# 4. In-Memory Tracking States (Saves what you paid so you don't instantly churn)
+portfolio_positions = {
+    "BTC/USD": {"holding": False, "buy_price": 0.0, "qty": 0.0},
+    "ETH/USD": {"holding": False, "buy_price": 0.0, "qty": 0.0},
+    "SOL/USD": {"holding": False, "buy_price": 0.0, "qty": 0.0}
+}
 
-# local telemetry context states dictionaries tracking blocks
-thread_states = {symbol: {
-    "is_holding": False,
-    "position_qty": 0.0,
-    "buy_price": 0.0,
-    "entry_cost": 0.0,
-    "highest_high_in_trade": 0.0
-} for symbol in PORTFOLIO_SYMBOLS}
-
-# 3. LIVE MARKET DATA FETCH AND EXECUTION CLIENT GATEWAYS
-data_client = CryptoHistoricalDataClient(api_key=ALPACA_API_KEY, secret_key=ALPACA_SECRET_KEY)
-trading_client = TradingClient(api_key=ALPACA_API_KEY, secret_key=ALPACA_SECRET_KEY, paper=True)
-
-def fetch_live_market_candles(symbol):
-    end_time = datetime.now(UTC)
-    start_time = end_time - pd.Timedelta(hours=100)
+def execute_alpaca_order(symbol, side, allocation_or_qty):
+    \"\"\"Transmits safe market orders downstream to Alpaca APIs\"\"\"
     try:
-        request_params = CryptoBarsRequest(
-            symbol_or_symbols=symbol,
-            timeframe=TimeFrame(amount=15, unit=TimeFrameUnit.Minute),
-            start=start_time,
-            end=end_time
-        )
-        bars = data_client.get_crypto_bars(request_params)
-        df_raw = bars.df
-        if df_raw is None or df_raw.empty:
-            return None
+        # Standardize tickers (Alpaca reads 'BTCUSD' instead of 'BTC/USD')
+        alpaca_ticker = symbol.replace("/", "")
         
-        # 🛠️ FIXED: Safely isolate target indexes using the exact multi-index keys returned by the SDK
-        clean_key = symbol.replace("/", "")
-        if clean_key in df_raw.index.get_level_values(0):
-            df = df_raw.xs(clean_key, level=0).copy()
-        else:
-            df = df_raw.reset_index(level=0, drop=True)
+        if side == OrderSide.BUY:
+            req = MarketOrderRequest(
+                symbol=alpaca_ticker,
+                notional=allocation_or_qty, # Allocates exact cash amount
+                side=OrderSide.BUY,
+                time_in_force=TimeInForce.GTC
+            )
+            trading_client.submit_order(order_data=req)
+            logger.info(f"🚀 [ALPACA ORDER SENT] Market BUY submitted for {symbol}: ${allocation_or_qty:,.2f}")
             
-        df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume'}, inplace=True)
-        return df[['Open', 'High', 'Low', 'Close', 'Volume']]
+        elif side == OrderSide.SELL:
+            req = MarketOrderRequest(
+                symbol=alpaca_ticker,
+                qty=allocation_or_qty, # Liquidates your specific token count
+                side=OrderSide.SELL,
+                time_in_force=TimeInForce.GTC
+            )
+            trading_client.submit_order(order_data=req)
+            logger.info(f"🏁 [ALPACA ORDER SENT] Liquidation MARKET SELL submitted for {symbol}: {allocation_or_qty}")
     except Exception as e:
-        logging.error(f"❌ Internal API Data Fetch Failure on {symbol}: {e}")
-        return None
+        logger.error(f"Execution failed for {symbol}: {e}")
 
-def calculate_trend_signals(df_input):
-    if df_input is None or df_input.empty or len(df_input) < 2:
-        return None
-    df = df_input.copy()
-    df['Volume'] = df['Volume'].replace(0, 1e-8)
-    df['Date_Day'] = df.index.date
-    df['Typical_Price'] = (df['High'] + df['Low'] + df['Close']) / 3.0
-    df['TP_Vol'] = df['Typical_Price'] * df['Volume']
-    df['Cum_TP_Vol'] = df.groupby('Date_Day')['TP_Vol'].cumsum()
-    df['Cum_Vol'] = df.groupby('Date_Day')['Volume'].cumsum()
-    df['VWAP'] = df['Cum_TP_Vol'] / df['Cum_Vol']
-    df['High_Low'] = df['High'] - df['Low']
-    df['High_Close_Prev'] = abs(df['High'] - df['Close'].shift(1))
-    df['Low_Close_Prev'] = abs(df['Low'] - df['Close'].shift(1))
-    df['TR'] = df[['High_Low', 'High_Close_Prev', 'Low_Close_Prev']].max(axis=1)
-    df['ATR'] = df['TR'].rolling(window=20, min_periods=1).mean()
-    df['Asset_Norm_Vol'] = df['ATR'] / df['Close']
-    df['Fast_Trend_EMA'] = df['Close'].ewm(span=20, adjust=False).mean()
-    df['Limit_Buy_Target'] = df['VWAP'] + (0.3 * df['ATR'])
-    return df.ffill().bfill()
+def scan_event_matrix(symbol, current_market_price):
+    config = strategy_config[symbol]
+    position = portfolio_positions[symbol]
+    
+    logger.info(f" > [{symbol}] Market: ${current_market_price:,.2f} | Entry Goal: ${config['entry_goal']:,.2f} | Holding: {position['holding']}")
 
-# 4. CORE ENGINE LIVE EXECUTION STATE MACHINE (THE CENTRAL WORKER LOOP)
-def trading_loop():
-    time.sleep(5)
-    logging.info(f"⚡ Velocity Engine Live AUTHENTICATED-ALPACA Gateway Engaged...")
-    while True:
-        try:
-            account_info = trading_client.get_account()
-            current_cash = float(account_info.cash)
-            portfolio_value = float(account_info.portfolio_value)
-            active_positions = trading_client.get_all_positions()
-            holding_symbols = [p.symbol for p in active_positions]
+    # RULE 1: SAFE BUY CONDITION
+    if not position["holding"]:
+        if current_market_price <= config["entry_goal"]:
+            logger.info(f"🚀 [NATIVE MARKET BUY ORDER TRANSMITTED] -> Allocated ${config['allocation']:,.2f} into {symbol}")
             
-            live_timestamp_str = datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')
-            logging.info(f"⏱️ Scan Event Matrix Initiated: {live_timestamp_str}")
+            execute_alpaca_order(symbol, OrderSide.BUY, config["allocation"])
             
-            for symbol in PORTFOLIO_SYMBOLS:
-                s = thread_states[symbol]
-                clean_ticker = symbol.replace("/", "")
-                is_holding = clean_ticker in holding_symbols
-                
-                market_data = fetch_live_market_candles(symbol)
-                df_vectors = calculate_trend_signals(market_data)
-                
-                if df_vectors is None or len(df_vectors) < 2:
-                    continue
-                
-                current_close = df_vectors['Close'].iloc[-1]
-                current_high = df_vectors['High'].iloc[-1]
-                current_low = df_vectors['Low'].iloc[-1]
-                current_atr = df_vectors['ATR'].iloc[-1]
-                current_ema = df_vectors['Fast_Trend_EMA'].iloc[-1]
-                current_norm_vol = df_vectors['Asset_Norm_Vol'].iloc[-1]
-                limit_buy_target = df_vectors['Limit_Buy_Target'].iloc[-2]
-                
-                logging.info(f" > [{symbol}] Market: ${current_close:,.2f} | Entry Goal: ${limit_buy_target:,.2f} | Holding: {is_holding}")
-                
-                # --- STRUCTURED LIVE BROKER EXIT GATEWAYS ---
-                if is_holding:
-                    position_details = next(p for p in active_positions if p.symbol == clean_ticker)
-                    position_qty = abs(float(position_details.qty))
-                    
-                    if current_high > s["highest_high_in_trade"] or s["buy_price"] == 0:
-                        s["highest_high_in_trade"] = current_high
-                        s["buy_price"] = float(position_details.avg_entry_price)
-                        
-                    target_profit_price = s["buy_price"] + (ATR_PROFIT_MULT * current_atr)
-                    is_profit_extended = s["highest_high_in_trade"] > (s["buy_price"] + (2.0 * current_atr))
-                    is_trailing_active = s["highest_high_in_trade"] > (s["buy_price"] + (3.5 * current_atr))
-                    
-                    if is_trailing_active:
-                        target_stop_price = s["highest_high_in_trade"] - (1.5 * current_atr)
-                        reason_code = "TRAILING LOCK"
-                    elif is_profit_extended:
-                        target_stop_price = s["buy_price"]
-                        reason_code = "BE SHIELD"
-                    else:
-                        target_stop_price = s["buy_price"] - (ATR_STOP_MULT * current_atr)
-                        reason_code = "HARD STOP"
-                        
-                    # 🚀 TESTING OVERRIDE TRIGGER: Forces sell check loops to keep asset slots unblocked
-                    if current_high >= target_profit_price or current_low <= target_stop_price or True:
-                        order_data = MarketOrderRequest(
-                            symbol=clean_ticker,
-                            qty=position_qty,
-                            side=OrderSide.SELL,
-                            time_in_force=TimeInForce.GTC
-                        )
-                        trading_client.submit_order(order_data)
-                        logging.info(f"🏁 [NATIVE LIQUIDATION EXECUTED] -> Reason: {reason_code} for {symbol}")
-                        s["buy_price"] = 0.0
-                        s["highest_high_in_trade"] = 0.0
-                        
-                # --- STRUCTURED LIVE BROKER ENTRY GATEWAYS ---
-                else:
-                    # 🚀 Force ignition override switch handles instant test executions
-                    if current_high >= limit_buy_target or True:
-                        rolling_kelly = 0.55 - ((1.0 - 0.55) / (ATR_PROFIT_MULT / ATR_STOP_MULT))
-                        calculated_entry = current_cash * max(0.25, min(0.75, rolling_kelly * 0.5 * (1.3 if current_norm_vol > 0.0040 else 0.9)))
-                        
-                        if calculated_entry < 15.0 or current_cash < 20.0:
-                            continue
-                            
-                        order_data = MarketOrderRequest(
-                            symbol=clean_ticker,
-                            notional=round(calculated_entry, 2),
-                            side=OrderSide.BUY,
-                            time_in_force=TimeInForce.GTC
-                        )
-                        trading_client.submit_order(order_data)
-                        logging.info(f"🚀 [NATIVE MARKET BUY ORDER TRANSMITTED] -> Allocated ${calculated_entry:,.2f} into {symbol}")
-                        s["buy_price"] = current_close
-                        s["highest_high_in_trade"] = current_close
-        except Exception as loop_err:
-            logging.error(f"❌ Error encountered inside matrix loop core execution wrapper: {loop_err}")
-            
-        # Standard loop pacing mechanism to enforce strict api rate limits
-        time.sleep(POLLING_INTERVAL_SECONDS)
+            # Update position states to remember what you spent
+            position["holding"] = True
+            position["buy_price"] = current_market_price
+            position["qty"] = config["allocation"] / current_market_price 
 
-# ==========================================
+    # RULE 2: FIXED SELL CONDITION (Prevents immediate stop-loss loops)
+    elif position["holding"]:
+        # Calculate trailing floor using your actual entry fill price
+        hard_stop_floor = position["buy_price"] * (1.0 - config["stop_loss_pct"])
+        
+        if current_market_price <= hard_stop_floor:
+            logger.warning(f"🏁 [NATIVE LIQUIDATION EXECUTED] -> Reason: HARD STOP for {symbol} (Paid: ${position['buy_price']:,.2f}, Floor: ${hard_stop_floor:,.2f})")
+            
+            execute_alpaca_order(symbol, OrderSide.SELL, position["qty"])
+            
+            # Clear state fields safely post liquidation
+            position["holding"] = False
+            position["buy_price"] = 0.0
+            position["qty"] = 0.0
