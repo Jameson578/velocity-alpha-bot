@@ -19,7 +19,6 @@ logger = logging.getLogger("VelocityEngine")
 API_KEY = os.environ.get("ALPACA_API_KEY", "YOUR_API_KEY_HERE")
 SECRET_KEY = os.environ.get("ALPACA_SECRET_KEY", "YOUR_SECRET_KEY_HERE")
 
-# Production Mappings
 BASE_URL = "https://alpaca.markets"
 DATA_URL = "https://alpaca.markets"
 
@@ -36,7 +35,7 @@ portfolio_positions = {
 }
 
 def make_alpaca_request(url, method="GET", payload=None):
-    """Refactored request engine with empty response fallbacks"""
+    """Refactored request block explicitly verifying server response codes"""
     try:
         req = urllib.request.Request(url, method=method)
         req.add_header("APCA-API-KEY-ID", API_KEY)
@@ -46,13 +45,22 @@ def make_alpaca_request(url, method="GET", payload=None):
         
         data = json.dumps(payload).encode('utf-8') if payload else None
         with urllib.request.urlopen(req, data=data, timeout=10) as response:
+            # FIX: If Alpaca returns a 204 status, return an empty array instead of parsing nothing
+            if response.status == 204:
+                return []
+                
             res_data = response.read().decode('utf-8')
-            # FIX: Fallback to an empty dictionary structure if the server returns no content
             if not res_data or res_data.strip() == "":
-                return {}
+                return [] if method == "GET" and "positions" in url else {}
             return json.loads(res_data)
+    except urllib.error.HTTPError as http_err:
+        # Handles 204 edge-cases if thrown directly as an exception object downstream
+        if http_err.code == 204:
+            return []
+        logger.error(f"Alpaca API Server returned HTTP Error {http_err.code}")
+        return None
     except Exception as e:
-        logger.error(f"Alpaca API connection failure: {e}")
+        logger.error(f"Network transport level tracking anomaly: {e}")
         return None
 
 def native_indicators(symbol):
@@ -61,7 +69,7 @@ def native_indicators(symbol):
         data = make_alpaca_request(url)
         
         if not data or 'bars' not in data or symbol not in data['bars'] or not data['bars'][symbol]:
-            logger.warning(f"⚠️ No price tracking information returned yet for {symbol}. Waiting for next data bar...")
+            logger.warning(f"⚠️ Price metrics warming up for {symbol}. Synching to active ticker chart...")
             return None, None, None
             
         bars = data['bars'][symbol]
@@ -109,7 +117,7 @@ def sync_positions():
     if positions is None: 
         return
         
-    active_symbols = [p['symbol'] for p in positions if 'symbol' in p]
+    active_symbols = [p['symbol'] for p in positions if isinstance(p, dict) and 'symbol' in p]
     for symbol in strategy_config.keys():
         if symbol in active_symbols:
             pos = next(p for p in positions if p.get('symbol') == symbol)
