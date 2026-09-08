@@ -18,7 +18,6 @@ logging.basicConfig(
 try:
     from flask import Flask
     app = Flask(__name__)
-
     @app.route('/')
     def health_check():
         return "Velocity Alpha Monolith Engine: ONLINE", 200
@@ -78,7 +77,7 @@ def fetch_live_market_candles(symbol):
         df_raw = bars.df
         if df_raw is None or df_raw.empty:
             return None
-            
+        
         # 🛠️ FIXED: Safely isolate target indexes using the exact multi-index keys returned by the SDK
         clean_key = symbol.replace("/", "")
         if clean_key in df_raw.index.get_level_values(0):
@@ -117,7 +116,6 @@ def calculate_trend_signals(df_input):
 def trading_loop():
     time.sleep(5)
     logging.info(f"⚡ Velocity Engine Live AUTHENTICATED-ALPACA Gateway Engaged...")
-    
     while True:
         try:
             account_info = trading_client.get_account()
@@ -139,7 +137,7 @@ def trading_loop():
                 
                 if df_vectors is None or len(df_vectors) < 2:
                     continue
-                    
+                
                 current_close = df_vectors['Close'].iloc[-1]
                 current_high = df_vectors['High'].iloc[-1]
                 current_low = df_vectors['Low'].iloc[-1]
@@ -206,11 +204,10 @@ def trading_loop():
                         logging.info(f"🚀 [NATIVE MARKET BUY ORDER TRANSMITTED] -> Allocated ${calculated_entry:,.2f} into {symbol}")
                         s["buy_price"] = current_close
                         s["highest_high_in_trade"] = current_close
-
         except Exception as loop_err:
             logging.error(f"❌ Error encountered inside matrix loop core execution wrapper: {loop_err}")
             
-        # Standard loop pacing mechanism to enforce strict api rate limits 
+        # Standard loop pacing mechanism to enforce strict api rate limits
         time.sleep(POLLING_INTERVAL_SECONDS)
 
 # ==========================================
