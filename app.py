@@ -4,10 +4,8 @@ import logging
 import threading
 import json
 import urllib.request
-from datetime import datetime, timedelta, timezone
 from flask import Flask
 
-# Initialize Flask Framework layer cleanly
 app = Flask(__name__)
 
 @app.route('/')
@@ -21,7 +19,7 @@ logger = logging.getLogger("VelocityEngine")
 API_KEY = os.environ.get("ALPACA_API_KEY", "YOUR_API_KEY_HERE")
 SECRET_KEY = os.environ.get("ALPACA_SECRET_KEY", "YOUR_SECRET_KEY_HERE")
 
-# Production endpoints mapped to direct REST URLs
+# Production Mappings
 BASE_URL = "https://alpaca.markets"
 DATA_URL = "https://alpaca.markets"
 
@@ -38,30 +36,32 @@ portfolio_positions = {
 }
 
 def make_alpaca_request(url, method="GET", payload=None):
-    """Refactored network client carrying authorization and browser agent headers"""
+    """Refactored request engine with empty response fallbacks"""
     try:
         req = urllib.request.Request(url, method=method)
         req.add_header("APCA-API-KEY-ID", API_KEY)
         req.add_header("APCA-API-SECRET-KEY", SECRET_KEY)
         req.add_header("Content-Type", "application/json")
-        # FIX: Added User-Agent browser mapping to clear the 403 Forbidden firewall blocks
-        req.add_header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+        req.add_header("User-Agent", "Mozilla/5.0")
         
         data = json.dumps(payload).encode('utf-8') if payload else None
         with urllib.request.urlopen(req, data=data, timeout=10) as response:
-            return json.loads(response.read().decode('utf-8'))
+            res_data = response.read().decode('utf-8')
+            # FIX: Fallback to an empty dictionary structure if the server returns no content
+            if not res_data or res_data.strip() == "":
+                return {}
+            return json.loads(res_data)
     except Exception as e:
         logger.error(f"Alpaca API connection failure: {e}")
         return None
 
 def native_indicators(symbol):
-    """Calculates EMA and RSI metrics cleanly over basic HTTP strings"""
     try:
-        # FIX: Restructured the URL string structure to ensure timestamp variables do not trigger port bugs
         url = f"{DATA_URL}?symbols={symbol}&timeframe=1Min&limit=100"
         data = make_alpaca_request(url)
         
         if not data or 'bars' not in data or symbol not in data['bars'] or not data['bars'][symbol]:
+            logger.warning(f"⚠️ No price tracking information returned yet for {symbol}. Waiting for next data bar...")
             return None, None, None
             
         bars = data['bars'][symbol]
@@ -108,11 +108,11 @@ def sync_positions():
     positions = make_alpaca_request(url)
     if positions is None: 
         return
-    
-    active_symbols = [p['symbol'] for p in positions]
+        
+    active_symbols = [p['symbol'] for p in positions if 'symbol' in p]
     for symbol in strategy_config.keys():
         if symbol in active_symbols:
-            pos = next(p for p in positions if p['symbol'] == symbol)
+            pos = next(p for p in positions if p.get('symbol') == symbol)
             portfolio_positions[symbol]["holding"] = True
             portfolio_positions[symbol]["qty"] = float(pos['qty'])
             if portfolio_positions[symbol]["buy_price"] == 0.0:
@@ -158,7 +158,6 @@ def background_loop():
             logger.error(f"Critical execution error: {e}")
         time.sleep(15)
 
-# Background processing initializer hooks
 trading_thread = threading.Thread(target=background_loop, daemon=True)
 trading_thread.start()
 
