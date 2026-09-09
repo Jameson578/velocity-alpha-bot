@@ -23,10 +23,11 @@ SECRET_KEY = os.environ.get("ALPACA_SECRET_KEY", "YOUR_SECRET_KEY_HERE")
 BASE_URL = "https://alpaca.markets"
 DATA_URL = "https://alpaca.markets"
 
+# 1. Added take_profit_pct (3%) to the configurations
 strategy_config = {
-    "BTCUSD": {"entry_goal": 78543.73, "stop_loss_pct": 0.01, "allocation": 24000.0},
-    "ETHUSD": {"entry_goal": 2487.56, "stop_loss_pct": 0.01, "allocation": 24000.0},
-    "SOLUSD": {"entry_goal": 103.26, "stop_loss_pct": 0.01, "allocation": 24000.0}
+    "BTCUSD": {"entry_goal": 78543.73, "stop_loss_pct": 0.01, "take_profit_pct": 0.03, "allocation": 24000.0},
+    "ETHUSD": {"entry_goal": 2487.56, "stop_loss_pct": 0.01, "take_profit_pct": 0.03, "allocation": 24000.0},
+    "SOLUSD": {"entry_goal": 103.26, "stop_loss_pct": 0.01, "take_profit_pct": 0.03, "allocation": 24000.0}
 }
 
 portfolio_positions = {
@@ -54,7 +55,6 @@ def make_alpaca_request(url, method="GET", payload=None):
     except urllib.error.HTTPError as http_err:
         if http_err.code == 204:
             return []
-        # Suppress logging clutter for standard empty position queries
         if "positions" not in url:
             logger.error(f"Alpaca API Server returned HTTP Error {http_err.code}")
         return None
@@ -62,9 +62,7 @@ def make_alpaca_request(url, method="GET", payload=None):
         return None
 
 def native_indicators(symbol):
-    """Calculates metrics via structural ISO data range parameters"""
     try:
-        # FIX: Explicitly format timeline strings into canonical ISO 8601 targets
         now_dt = datetime.now(timezone.utc)
         start_dt = now_dt - timedelta(hours=4)
         
@@ -86,7 +84,7 @@ def native_indicators(symbol):
         current_price = closes[-1]
         
         # EMA 50
-        ema = closes[0]
+        ema = closes
         k = 2 / (50 + 1)
         for price in closes[1:]:
             ema = (price * k) + (ema * (1 - k))
@@ -142,7 +140,6 @@ def run_trading_cycle():
     for symbol, config in strategy_config.items():
         price, ema, rsi = native_indicators(symbol)
         if price is None: 
-            # Suppress tracking anomaly warnings during structural data filling updates
             continue
         
         position = portfolio_positions[symbol]
@@ -156,10 +153,21 @@ def run_trading_cycle():
                 payload = {"symbol": symbol, "qty": str(round(target_qty, 4)), "side": "buy", "type": "market", "time_in_force": "gtc"}
                 make_alpaca_request(url, method="POST", payload=payload)
                 
+        # 2. UPDATED DUAL EXIT GATEWAY LOGIC
         elif position["holding"]:
             hard_stop_floor = position["buy_price"] * (1.0 - config["stop_loss_pct"])
-            if price <= hard_stop_floor:
-                logger.warning(f"🏁 [HARD STOP BREACH] Liquidating open positions for {symbol}")
+            profit_target_ceiling = position["buy_price"] * (1.0 + config["take_profit_pct"])
+            
+            # Upside Exit Check
+            if price >= profit_target_ceiling:
+                logger.info(f"💰 [TAKE PROFIT MATCH] Target hit for {symbol}! Liquidating at a 3% profit.")
+                url = f"{BASE_URL}/v2/orders"
+                payload = {"symbol": symbol, "qty": str(position["qty"]), "side": "sell", "type": "market", "time_in_force": "gtc"}
+                make_alpaca_request(url, method="POST", payload=payload)
+            
+            # Downside Exit Check
+            elif price <= hard_stop_floor:
+                logger.warning(f"🏁 [HARD STOP BREACH] Floor hit for {symbol}. Liquidating at a 1% stop loss.")
                 url = f"{BASE_URL}/v2/orders"
                 payload = {"symbol": symbol, "qty": str(position["qty"]), "side": "sell", "type": "market", "time_in_force": "gtc"}
                 make_alpaca_request(url, method="POST", payload=payload)
