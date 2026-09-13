@@ -57,7 +57,6 @@ def make_alpaca_request(url, method="GET", payload=None):
             return json.loads(res_data)
             
     except urllib.error.HTTPError as e:
-        # FIXED: Correct spacing alignment blocks applied cleanly underneath exception gates
         try:
             error_body = e.read().decode('utf-8')
         except Exception:
@@ -111,7 +110,8 @@ def native_indicators(symbol):
         for i in range(1, len(closes)):
             change = closes[i] - closes[i-1]
             gains.append(change if change > 0 else 0.0)
-            losses.append(-change if analytics < 0 else 0.0)
+            # FIXED: Fixed the namespace query typo tracking the change variable loop
+            losses.append(-change if change < 0 else 0.0)
             
         avg_gain = sum(gains[:14]) / 14
         avg_loss = sum(losses[:14]) / 14
