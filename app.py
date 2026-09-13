@@ -3,7 +3,7 @@ import sys
 import logging
 import pandas as pd
 import numpy as np
-from datetime import datetime, UTC
+from datetime import datetime, UTC, timedelta
 from flask import Flask
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -32,7 +32,7 @@ ATR_PROFIT_MULT = 2.5
 ATR_STOP_MULT = 2.5
 FEE_RATE = 0.0025
 
-# 3. GLOBAL PORTFOLIO MEMORY POOL (Persists across iterations)
+# 3. GLOBAL PORTFOLIO MEMORY POOL (Equipped with clean cool-down tracking states)
 sim_cash = INITIAL_CASH
 trade_counter = 0
 total_fees_paid = 0.0
@@ -41,13 +41,13 @@ thread_states = {symbol: {
     "position_qty": 0.0,
     "buy_price": 0.0,
     "entry_cost": 0.0,
-    "highest_high_in_trade": 0.0
+    "highest_high_in_trade": 0.0,
+    "cool_down_until": None  # FIXED: Prevents over-trading loops on flat ranges
 } for symbol in PORTFOLIO_SYMBOLS}
 
 # Initialize the secure data handshake client
 data_client = CryptoHistoricalDataClient(api_key=ALPACA_API_KEY, secret_key=ALPACA_SECRET_KEY)
 logger.info(f"⚡ Velocity Engine Live AUTHENTICATED-ALPACA Gateway Engaged...")
-logger.info(f"💰 Starting Capital: ${sim_cash:,.2f} USD | Focus: {PORTFOLIO_SYMBOLS}")
 
 # 4. MARKET CANDLE FETCH UTILITY
 def fetch_live_market_candles(symbol):
@@ -63,11 +63,9 @@ def fetch_live_market_candles(symbol):
         bars = data_client.get_crypto_bars(request_params)
         df_raw = bars.df
         if df_raw is None or df_raw.empty:
-            raise ValueError(f"Alpaca node returned an empty snapshot matrix for {symbol}.")
+            raise ValueError(f"Alpaca node returned an empty matrix for {symbol}.")
         df = df_raw.reset_index(level=0, drop=True)
-        df.rename(columns={
-            'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume'
-        }, inplace=True)
+        df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume'}, inplace=True)
         return df[['Open', 'High', 'Low', 'Close', 'Volume']]
     except Exception as e:
         logger.warning(f"Data Feed Interruption on {symbol}: {e}")
@@ -95,11 +93,12 @@ def calculate_trend_signals(df_input):
     df['Limit_Buy_Target'] = df['VWAP'] + (0.3 * df['ATR'])
     return df.ffill().bfill()
 
-# 6. EXECUTABLE CORE ENGINE (TRIGGERED MANUALLY PER CYCLE VIA BACKGROUND TIMER)
+# 6. EXECUTABLE CORE ENGINE (WITH DYNAMIC ANTI-LOOP PROTECTIONS)
 def execution_cycle_tick():
     global sim_cash, trade_counter, total_fees_paid
     
-    live_timestamp_str = datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')
+    now = datetime.now(UTC)
+    live_timestamp_str = now.strftime('%Y-%m-%d %H:%M:%S UTC')
     logger.info(f"⏱️ Scan Event Matrix Initiated: {live_timestamp_str}")
     
     for symbol in PORTFOLIO_SYMBOLS:
@@ -116,11 +115,18 @@ def execution_cycle_tick():
         current_atr = df_vectors['ATR'].iloc[-1]
         current_ema = df_vectors['Fast_Trend_EMA'].iloc[-1]
         current_norm_vol = df_vectors['Asset_Norm_Vol'].iloc[-1]
-        
         limit_buy_target = df_vectors['Limit_Buy_Target'].iloc[-1]
         
         open_pnl = (s["position_qty"] * (current_close - s["buy_price"])) if s["is_holding"] else 0.0
-        logger.info(f" > [{symbol}] Market: ${current_close:,.2f} | Entry Goal: ${limit_buy_target:,.2f} | Asset PnL: ${open_pnl:+,.2f}")
+        
+        # Log cool-down parameters cleanly
+        if s["cool_down_until"] and now < s["cool_down_until"]:
+            mins_left = (s["cool_down_until"] - now).total_seconds() / 60
+            logger.info(f" > [{symbol}] Market: ${current_close:,.2f} | ❄️ COOL-DOWN ACTIVE ({mins_left:.1f}m left)")
+            in_cool_down = True
+        else:
+            logger.info(f" > [{symbol}] Market: ${current_close:,.2f} | Entry Goal: ${limit_buy_target:,.2f} | Asset PnL: ${open_pnl:+,.2f}")
+            in_cool_down = False
         
         if s["is_holding"]:
             if current_high > s["highest_high_in_trade"]:
@@ -148,11 +154,14 @@ def execution_cycle_tick():
                 trade_counter += 1
                 logger.info(f"🏁 [VIRTUAL LIQUIDATION] -> Event: {exit_reason}")
                 logger.info(f"🎉 Trade #{trade_counter} Settled! Net PnL: ${net_pnl:+.2f} | Wallet Cash: ${sim_cash:,.2f}")
+                
+                # FIXED: Enforce a rigid 30-minute block post-liquidation to kill high-frequency cycles
+                s["cool_down_until"] = now + timedelta(minutes=30)
                 s["is_holding"] = False
                 s["position_qty"] = 0.0
                 s["highest_high_in_trade"] = 0.0
         else:
-            if current_high >= limit_buy_target and (current_atr / current_close) >= 0.0010 and current_close > current_ema:
+            if not in_cool_down and current_high >= limit_buy_target and (current_atr / current_close) >= 0.0010 and current_close > current_ema:
                 rolling_kelly = 0.55 - ((1.0 - 0.55) / (ATR_PROFIT_MULT / ATR_STOP_MULT))
                 calculated_entry = sim_cash * max(0.25, min(0.75, rolling_kelly * 0.5 * (1.3 if current_norm_vol > 0.0040 else 0.9)))
                 if calculated_entry < 10.0 and sim_cash >= 10.0:
@@ -172,7 +181,7 @@ def execution_cycle_tick():
     active_positions_value = sum([thread_states[sym]["entry_cost"] for sym in PORTFOLIO_SYMBOLS if thread_states[sym]["is_holding"]])
     logger.info(f"📊 Matrix Wallet Cash: ${sim_cash:,.2f} | Net Pool Equity: ${(sim_cash + active_positions_value):,.2f} | Total Session Fees: ${total_fees_paid:,.2f}")
 
-# 7. INITIALIZE DYNAMIC TIMER POOL (Executes strategy loop cycle every 15 seconds)
+# 7. INITIALIZE DYNAMIC TIMER POOL (Executes loop cycle every 15 seconds)
 scheduler = BackgroundScheduler(daemon=True)
 scheduler.add_job(func=execution_cycle_tick, trigger="interval", seconds=15)
 scheduler.start()
