@@ -4,6 +4,7 @@ import logging
 import threading
 import json
 import urllib.request
+import urllib.error
 from datetime import datetime, timedelta, timezone
 from flask import Flask
 
@@ -16,7 +17,7 @@ def health_check():
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 logger = logging.getLogger("VelocityEngine")
 
-# Authenticate Keys - Verify that these exact matching names exist in your Render Env panel!
+# Authenticate Keys
 API_KEY = os.environ.get("ALPACA_API_KEY", "YOUR_API_KEY_HERE")
 SECRET_KEY = os.environ.get("ALPACA_SECRET_KEY", "YOUR_SECRET_KEY_HERE")
 
@@ -45,6 +46,7 @@ def make_alpaca_request(url, method="GET", payload=None):
         req.add_header("APCA-API-SECRET-KEY", SECRET_KEY)
         req.add_header("Content-Type", "application/json")
         req.add_header("User-Agent", "Mozilla/5.0")
+        
         data = json.dumps(payload).encode('utf-8') if payload else None
         with urllib.request.urlopen(req, data=data, timeout=10) as response:
             if response.status == 204:
@@ -53,6 +55,12 @@ def make_alpaca_request(url, method="GET", payload=None):
             if not res_data or res_data.strip() == "":
                 return [] if "positions" in url or "orders" in url else {}
             return json.loads(res_data)
+            
+    except urllib.error.HTTPError as e:
+        # FIXED: Captures exact HTML status details (like 403 Key Rejections or 400 Bad Queries)
+        error_body = e.read().decode('utf-8') if e.content_type == "application/json" else "Non-JSON Error Page"
+        logger.error(f"❌ Alpaca rejected request with Status {e.code}. Reason: {error_body}")
+        return None
     except Exception as e:
         logger.error(f"Network request failure: {e}")
         return None
@@ -178,7 +186,6 @@ def run_trading_cycle():
             trailing_stop_floor = position["highest_high"] * (1.0 - config["stop_loss_pct"])
             profit_target_ceiling = position["buy_price"] * (1.0 + config["take_profit_pct"])
             
-            # Condition A: Upside Take-Profit Ceiling Reached (6% Gain)
             if price >= profit_target_ceiling:
                 logger.info(f"💰 [TAKE PROFIT MATCH] Target hit for {symbol}! Liquidating at a 6% macro profit.")
                 url = f"{BASE_URL}/v2/orders"
@@ -186,7 +193,6 @@ def run_trading_cycle():
                 make_alpaca_request(url, method="POST", payload=payload)
                 position["cool_down_until"] = now + timedelta(hours=2)
                 
-            # Condition B: Downside Trailing Stop Loss Floor Reached
             elif price <= trailing_stop_floor:
                 exit_reason = "TRAILING STOP" if position["highest_high"] > position["buy_price"] else "HARD STOP LOSS"
                 logger.warning(f"🏁 [{exit_reason} BREACH] Protective floor hit for {symbol}. Liquidating positions.")
@@ -204,8 +210,3 @@ def background_loop():
             logger.error(f"Critical execution error: {e}")
         time.sleep(15)
 
-trading_thread = threading.Thread(target=background_loop, daemon=True)
-trading_thread.start()
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
