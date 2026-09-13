@@ -30,7 +30,9 @@ INITIAL_CASH = 500.00
 MARGIN_LEVERAGE = 1.5
 ATR_PROFIT_MULT = 2.5
 ATR_STOP_MULT = 2.5
-FEE_RATE = 0.0010
+
+# PROTECTION CHANGE 1: Fee rate adjusted to 0.25% to mirror live Alpaca crypto exchange entry tiers
+FEE_RATE = 0.0025
 
 # 3. GLOBAL PORTFOLIO MEMORY POOL (Persists across iterations)
 sim_cash = INITIAL_CASH
@@ -117,8 +119,8 @@ def execution_cycle_tick():
         current_ema = df_vectors['Fast_Trend_EMA'].iloc[-1]
         current_norm_vol = df_vectors['Asset_Norm_Vol'].iloc[-1]
         
-        # REVERTED TO OLD DATA MATRICES: Exploits memory lag to generate rapid virtual returns
-        limit_buy_target = df_vectors['Limit_Buy_Target'].iloc[-2]
+        # PROTECTION CHANGE 2: Points to modern index [-1] to ensure real breakout targets are evaluated
+        limit_buy_target = df_vectors['Limit_Buy_Target'].iloc[-1]
         
         open_pnl = (s["position_qty"] * (current_close - s["buy_price"])) if s["is_holding"] else 0.0
         logger.info(f" > [{symbol}] Market: ${current_close:,.2f} | Entry Goal: ${limit_buy_target:,.2f} | Asset PnL: ${open_pnl:+,.2f}")
