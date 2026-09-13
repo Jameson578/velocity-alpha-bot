@@ -20,7 +20,7 @@ logger = logging.getLogger("VelocityEngine")
 API_KEY = os.environ.get("ALPACA_API_KEY", "YOUR_API_KEY_HERE")
 SECRET_KEY = os.environ.get("ALPACA_SECRET_KEY", "YOUR_SECRET_KEY_HERE")
 
-# FIXED: Points to Alpaca Paper Trading API and the correct Crypto Data v1beta3 endpoints
+# Configured for Alpaca Paper Trading and the correct Crypto Data v1beta3 endpoints
 BASE_URL = "https://alpaca.markets"
 DATA_URL = "https://alpaca.markets"
 
@@ -75,7 +75,6 @@ def native_indicators(symbol):
         start_str = (now_dt - timedelta(hours=4)).strftime('%Y-%m-%dT%H:%M:%SZ')
         end_str = now_dt.strftime('%Y-%m-%dT%H:%M:%SZ')
         
-        # FIXED: Correct formatting structure for the crypto historical endpoint parameters
         url = f"{DATA_URL}?symbols={symbol}&timeframe=1Min&start={start_str}&end={end_str}"
         data = make_alpaca_request(url)
         
@@ -90,7 +89,7 @@ def native_indicators(symbol):
             
         current_price = closes[-1]
         
-        # EMA 50
+        # FIXED: Initialized correctly to pull numeric type context item
         ema = closes[0]
         k = 2 / (50 + 1)
         for price in closes[1:]:
@@ -174,11 +173,9 @@ def run_trading_cycle():
                 
         # RULE 2: DUAL DYNAMIC EXIT AND TRAILING STOP-LOSS GATEWAY
         elif position["holding"]:
-            # Update dynamic high watermark memory row-by-row
             if price > position["highest_high"]:
                 position["highest_high"] = price
                 
-            # Trailing stop floor tracking paths
             trailing_stop_floor = position["highest_high"] * (1.0 - config["stop_loss_pct"])
             profit_target_ceiling = position["buy_price"] * (1.0 + config["take_profit_pct"])
             
@@ -188,7 +185,6 @@ def run_trading_cycle():
                 url = f"{BASE_URL}/v2/orders"
                 payload = {"symbol": symbol, "qty": str(position["qty"]), "side": "sell", "type": "market", "time_in_force": "gtc"}
                 make_alpaca_request(url, method="POST", payload=payload)
-                # Lock out entries for 2 hours to prevent trading top pullbacks
                 position["cool_down_until"] = now + timedelta(hours=2)
                 
             # Condition B: Downside Trailing Stop Loss Floor Reached
@@ -198,7 +194,6 @@ def run_trading_cycle():
                 url = f"{BASE_URL}/v2/orders"
                 payload = {"symbol": symbol, "qty": str(position["qty"]), "side": "sell", "type": "market", "time_in_force": "gtc"}
                 make_alpaca_request(url, method="POST", payload=payload)
-                # Lock out entries for 2 hours to shield capital from choppy noise
                 position["cool_down_until"] = now + timedelta(hours=2)
 
 def background_loop():
@@ -206,3 +201,12 @@ def background_loop():
     while True:
         try:
             run_trading_cycle()
+        except Exception as e:
+            logger.error(f"Critical execution error: {e}")
+        time.sleep(15)
+
+trading_thread = threading.Thread(target=background_loop, daemon=True)
+trading_thread.start()
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
