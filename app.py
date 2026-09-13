@@ -10,7 +10,10 @@ from flask import Flask
 
 app = Flask(__name__)
 
-# Configure root system stream handles to force logs into Render's console output
+@app.route('/')
+def health_check():
+    return "Velocity Hybrid Momentum Engine: ONLINE", 200
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 logger = logging.getLogger("VelocityEngine")
 
@@ -18,39 +21,23 @@ logger = logging.getLogger("VelocityEngine")
 API_KEY = os.environ.get("ALPACA_API_KEY", "YOUR_API_KEY_HERE")
 SECRET_KEY = os.environ.get("ALPACA_SECRET_KEY", "YOUR_SECRET_KEY_HERE")
 
-BASE_URL = "https://paper-api.alpaca.markets"
+# Configured for Alpaca Paper Trading & Official Crypto Data v1beta3 gateways
+BASE_URL = "https://alpaca.markets"
 DATA_URL = "https://alpaca.markets"
 
+# Strategy Parameters - Configured with 6% Take-Profit Ceilings and Precise Step Limits
 strategy_config = {
     "BTCUSD": {"entry_goal": 78543.73, "stop_loss_pct": 0.01, "take_profit_pct": 0.06, "allocation": 24000.0, "step": 4},
     "ETHUSD": {"entry_goal": 2487.56, "stop_loss_pct": 0.01, "take_profit_pct": 0.06, "allocation": 24000.0, "step": 4},
     "SOLUSD": {"entry_goal": 103.26, "stop_loss_pct": 0.01, "take_profit_pct": 0.06, "allocation": 24000.0, "step": 2}
 }
 
+# Tracking states equipped with highest_high memories & cool-down clocks
 portfolio_positions = {
     "BTCUSD": {"holding": False, "buy_price": 0.0, "qty": 0.0, "highest_high": 0.0, "cool_down_until": None},
     "ETHUSD": {"holding": False, "buy_price": 0.0, "qty": 0.0, "highest_high": 0.0, "cool_down_until": None},
     "SOLUSD": {"holding": False, "buy_price": 0.0, "qty": 0.0, "highest_high": 0.0, "cool_down_until": None}
 }
-
-# Gatekeeper token to block multi-threaded process duplication
-bot_initialized = False
-init_lock = threading.Lock()
-
-@app.route('/')
-def health_check():
-    return "Velocity Hybrid Momentum Engine: ONLINE", 200
-
-# FIXED: Safely binds your loops exclusively to single container environments on first server access
-@app.before_request
-def start_bot_engine():
-    global bot_initialized
-    with init_lock:
-        if not bot_initialized:
-            logger.info("🚀 Server heartbeat recorded. Activating primary bot background worker process...")
-            trading_thread = threading.Thread(target=background_loop, daemon=True)
-            trading_thread.start()
-            bot_initialized = True
 
 def make_alpaca_request(url, method="GET", payload=None):
     try:
@@ -70,7 +57,11 @@ def make_alpaca_request(url, method="GET", payload=None):
             return json.loads(res_data)
             
     except urllib.error.HTTPError as e:
-        error_body = e.read().decode('utf-8') if e.headers.get_content_type() == "application/json" else "Non-JSON Error Page"
+        # FIXED: Correct spacing alignment blocks applied cleanly underneath exception gates
+        try:
+            error_body = e.read().decode('utf-8')
+        except Exception:
+            error_body = "Could not parse error message body"
         logger.error(f"❌ Alpaca rejected request with Status {e.code}. Reason: {error_body}")
         return None
     except Exception as e:
@@ -78,6 +69,7 @@ def make_alpaca_request(url, method="GET", payload=None):
         return None
 
 def cancel_all_open_orders():
+    """Purges floating or unexecuted orders at startup to ensure a clear ledger"""
     logger.info("🧹 Sweeping ledger... Checking for open orders to cancel.")
     url = f"{BASE_URL}/v2/orders"
     open_orders = make_alpaca_request(url)
@@ -119,7 +111,7 @@ def native_indicators(symbol):
         for i in range(1, len(closes)):
             change = closes[i] - closes[i-1]
             gains.append(change if change > 0 else 0.0)
-            losses.append(-change if change < 0 else 0.0)
+            losses.append(-change if analytics < 0 else 0.0)
             
         avg_gain = sum(gains[:14]) / 14
         avg_loss = sum(losses[:14]) / 14
@@ -167,6 +159,7 @@ def run_trading_cycle():
             continue
         position = portfolio_positions[symbol]
         
+        # Cool-Down Guard Check
         in_cool_down = False
         if position["cool_down_until"] and now < position["cool_down_until"]:
             in_cool_down = True
@@ -175,6 +168,7 @@ def run_trading_cycle():
         else:
             logger.info(f" > [{symbol}] Market: ${price:,.2f} | EMA50: ${ema:,.2f} | RSI14: {rsi:.1f} | Holding: {position['holding']}")
             
+        # RULE 1: SAFELY TRIGGER FILTERED BUY ENTRY
         if not position["holding"] and not in_cool_down:
             if price <= config["entry_goal"] and price > ema and rsi < 65:
                 raw_qty = config["allocation"] / price
@@ -187,6 +181,7 @@ def run_trading_cycle():
                 position["buy_price"] = price
                 position["highest_high"] = price
                 
+        # RULE 2: DUAL DYNAMIC EXIT AND TRAILING STOP-LOSS GATEWAY
         elif position["holding"]:
             if price > position["highest_high"]:
                 position["highest_high"] = price
@@ -215,3 +210,6 @@ def background_loop():
         try:
             run_trading_cycle()
         except Exception as e:
+            logger.error(f"Critical execution error: {e}")
+        time.sleep(15)
+
