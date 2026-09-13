@@ -27,7 +27,7 @@ ACCOUNT_TYPE = "paper"
 
 PORTFOLIO_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD"]
 INITIAL_CASH = 500.00
-MARGIN_LEVERAGE = 1.5
+MARGIN_LEVERAGE = 1.0  # FIXED: Disabled leverage down to a strict 1.0x baseline spot cost
 ATR_PROFIT_MULT = 2.5
 ATR_STOP_MULT = 2.5
 FEE_RATE = 0.0025
@@ -52,11 +52,10 @@ logger.info(f"⚡ Velocity Engine Live AUTHENTICATED-ALPACA Gateway Engaged...")
 # 4. MARKET CANDLE FETCH UTILITY (Adjusted to 1-Hour Timeframe)
 def fetch_live_market_candles(symbol):
     end_time = datetime.now(UTC)
-    # Pulling 200 hours of history to give indicators plenty of baseline data
     start_time = end_time - pd.Timedelta(hours=200) 
     request_params = CryptoBarsRequest(
         symbol_or_symbols=symbol,
-        timeframe=TimeFrame(1, TimeFrameUnit.Hour), # MODIFIED: Shifted to 1-Hour candlestick bars
+        timeframe=TimeFrame(1, TimeFrameUnit.Hour), 
         start=start_time,
         end=end_time
     )
@@ -179,7 +178,7 @@ def execution_cycle_tick():
         active_positions_value = sum([thread_states[sym]["entry_cost"] for sym in PORTFOLIO_SYMBOLS if thread_states[sym]["is_holding"]])
         logger.info(f"📊 Matrix Wallet Cash: ${sim_cash:,.2f} | Net Pool Equity: ${(sim_cash + active_positions_value):,.2f} | Total Session Fees: ${total_fees_paid:,.2f}")
 
-# 7. INITIALIZE DYNAMIC TIMER POOL (MODIFIED: Aligned to run exactly every 1 hour)
+# 7. INITIALIZE DYNAMIC TIMER POOL (Aligned to run exactly every 1 hour)
 scheduler = BackgroundScheduler(daemon=True)
 scheduler.add_job(func=execution_cycle_tick, trigger="interval", hours=1) 
 scheduler.start()
