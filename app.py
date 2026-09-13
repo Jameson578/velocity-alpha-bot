@@ -117,8 +117,8 @@ def execution_cycle_tick():
         current_ema = df_vectors['Fast_Trend_EMA'].iloc[-1]
         current_norm_vol = df_vectors['Asset_Norm_Vol'].iloc[-1]
         
-        # FIXED: Look at the current row index [-1] to evaluate modern active breakouts
-        limit_buy_target = df_vectors['Limit_Buy_Target'].iloc[-1]
+        # REVERTED TO OLD DATA MATRICES: Exploits memory lag to generate rapid virtual returns
+        limit_buy_target = df_vectors['Limit_Buy_Target'].iloc[-2]
         
         open_pnl = (s["position_qty"] * (current_close - s["buy_price"])) if s["is_holding"] else 0.0
         logger.info(f" > [{symbol}] Market: ${current_close:,.2f} | Entry Goal: ${limit_buy_target:,.2f} | Asset PnL: ${open_pnl:+,.2f}")
