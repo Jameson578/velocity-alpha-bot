@@ -16,26 +16,26 @@ def health_check():
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 logger = logging.getLogger("VelocityEngine")
 
-# Authenticate Keys
+# Authenticate Keys - Ensure these are set in your Render environment variables!
 API_KEY = os.environ.get("ALPACA_API_KEY", "YOUR_API_KEY_HERE")
 SECRET_KEY = os.environ.get("ALPACA_SECRET_KEY", "YOUR_SECRET_KEY_HERE")
 
-# FIXED: Shifted endpoints to the free tier historical Stock Equities channel
-BASE_URL = "https://alpaca.markets"
+# Configured for Alpaca Paper Trading & Official Crypto Data v1beta3 gateways
+BASE_URL = "https://paper-api.alpaca.markets"
 DATA_URL = "https://alpaca.markets"
 
-# FIXED: Shifted strategy tickers from restricted Crypto metrics over to liquid Equities
+# Strategy Parameters - Configured with 6% Take-Profit Ceilings and Precise Step Limits
 strategy_config = {
-    "SPY": {"entry_goal": 600.00, "stop_loss_pct": 0.01, "take_profit_pct": 0.06, "allocation": 24000.0, "step": 0},
-    "QQQ": {"entry_goal": 500.00, "stop_loss_pct": 0.01, "take_profit_pct": 0.06, "allocation": 24000.0, "step": 0},
-    "AAPL": {"entry_goal": 250.00, "stop_loss_pct": 0.01, "take_profit_pct": 0.06, "allocation": 24000.0, "step": 0}
+    "BTCUSD": {"entry_goal": 78543.73, "stop_loss_pct": 0.01, "take_profit_pct": 0.06, "allocation": 24000.0, "step": 4},
+    "ETHUSD": {"entry_goal": 2487.56, "stop_loss_pct": 0.01, "take_profit_pct": 0.06, "allocation": 24000.0, "step": 4},
+    "SOLUSD": {"entry_goal": 103.26, "stop_loss_pct": 0.01, "take_profit_pct": 0.06, "allocation": 24000.0, "step": 2}
 }
 
 # Tracking states equipped with highest_high memories & cool-down clocks
 portfolio_positions = {
-    "SPY": {"holding": False, "buy_price": 0.0, "qty": 0.0, "highest_high": 0.0, "cool_down_until": None},
-    "QQQ": {"holding": False, "buy_price": 0.0, "qty": 0.0, "highest_high": 0.0, "cool_down_until": None},
-    "AAPL": {"holding": False, "buy_price": 0.0, "qty": 0.0, "highest_high": 0.0, "cool_down_until": None}
+    "BTCUSD": {"holding": False, "buy_price": 0.0, "qty": 0.0, "highest_high": 0.0, "cool_down_until": None},
+    "ETHUSD": {"holding": False, "buy_price": 0.0, "qty": 0.0, "highest_high": 0.0, "cool_down_until": None},
+    "SOLUSD": {"holding": False, "buy_price": 0.0, "qty": 0.0, "highest_high": 0.0, "cool_down_until": None}
 }
 
 def make_alpaca_request(url, method="GET", payload=None):
@@ -72,7 +72,7 @@ def cancel_all_open_orders():
 def native_indicators(symbol):
     try:
         now_dt = datetime.now(timezone.utc)
-        # Stock bars require lookbacks within market trading windows (4 hours ago)
+        # Pulling 4 hours of minutely candles to construct technical baselines
         start_str = (now_dt - timedelta(hours=4)).strftime('%Y-%m-%dT%H:%M:%SZ')
         end_str = now_dt.strftime('%Y-%m-%dT%H:%M:%SZ')
         
@@ -90,13 +90,13 @@ def native_indicators(symbol):
             
         current_price = closes[-1]
         
-        # Initialized correctly to pull numeric type context item
+        # EMA 50 Generation
         ema = closes[0]
         k = 2 / (50 + 1)
         for price in closes[1:]:
             ema = (price * k) + (ema * (1 - k))
             
-        # RSI 14
+        # RSI 14 Generation
         gains, losses = [], []
         for i in range(1, len(closes)):
             change = closes[i] - closes[i-1]
@@ -161,17 +161,16 @@ def run_trading_cycle():
         # RULE 1: SAFELY TRIGGER FILTERED BUY ENTRY
         if not position["holding"] and not in_cool_down:
             if price <= config["entry_goal"] and price > ema and rsi < 65:
-                # Lot Sizing & Precision Control Alignment (Stocks use step 0 for whole shares)
+                # Lot Sizing & Precision Control Alignment
                 raw_qty = config["allocation"] / price
-                target_qty = int(raw_qty) if config["step"] == 0 else round(raw_qty, config["step"])
-                if target_qty > 0:
-                    logger.info(f"🚀 [TREND HYBRID MATCH] Transmitting BUY order for {symbol}: {target_qty} units")
-                    url = f"{BASE_URL}/v2/orders"
-                    payload = {"symbol": symbol, "qty": str(target_qty), "side": "buy", "type": "market", "time_in_force": "day"}
-                    make_alpaca_request(url, method="POST", payload=payload)
-                    position["holding"] = True
-                    position["buy_price"] = price
-                    position["highest_high"] = price
+                target_qty = round(raw_qty, config["step"])
+                logger.info(f"🚀 [TREND HYBRID MATCH] Transmitting BUY order for {symbol}: {target_qty} units")
+                url = f"{BASE_URL}/v2/orders"
+                payload = {"symbol": symbol, "qty": str(target_qty), "side": "buy", "type": "market", "time_in_force": "gtc"}
+                make_alpaca_request(url, method="POST", payload=payload)
+                position["holding"] = True
+                position["buy_price"] = price
+                position["highest_high"] = price
                 
         # RULE 2: DUAL DYNAMIC EXIT AND TRAILING STOP-LOSS GATEWAY
         elif position["holding"]:
@@ -185,7 +184,7 @@ def run_trading_cycle():
             if price >= profit_target_ceiling:
                 logger.info(f"💰 [TAKE PROFIT MATCH] Target hit for {symbol}! Liquidating at a 6% macro profit.")
                 url = f"{BASE_URL}/v2/orders"
-                payload = {"symbol": symbol, "qty": str(position["qty"]), "side": "sell", "type": "market", "time_in_force": "day"}
+                payload = {"symbol": symbol, "qty": str(position["qty"]), "side": "sell", "type": "market", "time_in_force": "gtc"}
                 make_alpaca_request(url, method="POST", payload=payload)
                 position["cool_down_until"] = now + timedelta(hours=2)
                 
@@ -194,7 +193,7 @@ def run_trading_cycle():
                 exit_reason = "TRAILING STOP" if position["highest_high"] > position["buy_price"] else "HARD STOP LOSS"
                 logger.warning(f"🏁 [{exit_reason} BREACH] Protective floor hit for {symbol}. Liquidating positions.")
                 url = f"{BASE_URL}/v2/orders"
-                payload = {"symbol": symbol, "qty": str(position["qty"]), "side": "sell", "type": "market", "time_in_force": "day"}
+                payload = {"symbol": symbol, "qty": str(position["qty"]), "side": "sell", "type": "market", "time_in_force": "gtc"}
                 make_alpaca_request(url, method="POST", payload=payload)
                 position["cool_down_until"] = now + timedelta(hours=2)
 
@@ -206,4 +205,7 @@ def background_loop():
         except Exception as e:
             logger.error(f"Critical execution error: {e}")
         time.sleep(15)
+
+trading_thread = threading.Thread(target=background_loop, daemon=True)
+trading_thread.start()
 
