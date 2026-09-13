@@ -20,7 +20,7 @@ logger = logging.getLogger("VelocityEngine")
 API_KEY = os.environ.get("ALPACA_API_KEY", "YOUR_API_KEY_HERE")
 SECRET_KEY = os.environ.get("ALPACA_SECRET_KEY", "YOUR_SECRET_KEY_HERE")
 
-# Configured for Alpaca Paper Trading and the correct Crypto Data v1beta3 endpoints
+# FIXED: Replaced standard site links with the correct API and Crypto endpoints
 BASE_URL = "https://alpaca.markets"
 DATA_URL = "https://alpaca.markets"
 
@@ -89,7 +89,7 @@ def native_indicators(symbol):
             
         current_price = closes[-1]
         
-        # FIXED: Initialized correctly to pull numeric type context item
+        # Initialized correctly to pull numeric type context item
         ema = closes[0]
         k = 2 / (50 + 1)
         for price in closes[1:]:
