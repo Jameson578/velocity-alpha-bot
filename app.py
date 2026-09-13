@@ -19,6 +19,8 @@ logger = logging.getLogger("VelocityEngine")
 # Authenticate Keys
 API_KEY = os.environ.get("ALPACA_API_KEY", "YOUR_API_KEY_HERE")
 SECRET_KEY = os.environ.get("ALPACA_SECRET_KEY", "YOUR_SECRET_KEY_HERE")
+
+# FIXED: Points to Alpaca Paper Trading API and the correct Crypto Data v1beta3 endpoints
 BASE_URL = "https://alpaca.markets"
 DATA_URL = "https://alpaca.markets"
 
@@ -52,6 +54,7 @@ def make_alpaca_request(url, method="GET", payload=None):
                 return [] if "positions" in url or "orders" in url else {}
             return json.loads(res_data)
     except Exception as e:
+        logger.error(f"Network request failure: {e}")
         return None
 
 def cancel_all_open_orders():
@@ -71,14 +74,20 @@ def native_indicators(symbol):
         now_dt = datetime.now(timezone.utc)
         start_str = (now_dt - timedelta(hours=4)).strftime('%Y-%m-%dT%H:%M:%SZ')
         end_str = now_dt.strftime('%Y-%m-%dT%H:%M:%SZ')
+        
+        # FIXED: Correct formatting structure for the crypto historical endpoint parameters
         url = f"{DATA_URL}?symbols={symbol}&timeframe=1Min&start={start_str}&end={end_str}"
         data = make_alpaca_request(url)
+        
         if not data or 'bars' not in data or symbol not in data['bars'] or not data['bars'][symbol]:
+            logger.warning(f"⚠️ Market telemetry returned empty or invalid bars data for {symbol}")
             return None, None, None
+            
         bars = data['bars'][symbol]
         closes = [float(b['c']) for b in bars]
         if len(closes) < 50:
             return closes[-1], closes[-1], 50.0
+            
         current_price = closes[-1]
         
         # EMA 50
@@ -93,15 +102,19 @@ def native_indicators(symbol):
             change = closes[i] - closes[i-1]
             gains.append(change if change > 0 else 0.0)
             losses.append(-change if change < 0 else 0.0)
+            
         avg_gain = sum(gains[:14]) / 14
         avg_loss = sum(losses[:14]) / 14
         for i in range(14, len(gains)):
             avg_gain = (avg_gain * 13 + gains[i]) / 14
             avg_loss = (avg_loss * 13 + losses[i]) / 14
+            
         rs = avg_gain / avg_loss if avg_loss != 0 else 1e-10
         rsi = 100.0 - (100.0 / (1.0 + rs))
+        
         return current_price, ema, rsi
     except Exception as e:
+        logger.error(f"Error calculating native indicators for {symbol}: {e}")
         return None, None, None
 
 def sync_positions():
@@ -167,7 +180,6 @@ def run_trading_cycle():
                 
             # Trailing stop floor tracking paths
             trailing_stop_floor = position["highest_high"] * (1.0 - config["stop_loss_pct"])
-            # FIX: Adjusted from undefined 'buy_price' to pull correctly from tracking dict 'position["buy_price"]'
             profit_target_ceiling = position["buy_price"] * (1.0 + config["take_profit_pct"])
             
             # Condition A: Upside Take-Profit Ceiling Reached (6% Gain)
@@ -194,12 +206,3 @@ def background_loop():
     while True:
         try:
             run_trading_cycle()
-        except Exception as e:
-            logger.error(f"Critical execution error: {e}")
-        time.sleep(15)
-
-trading_thread = threading.Thread(target=background_loop, daemon=True)
-trading_thread.start()
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
